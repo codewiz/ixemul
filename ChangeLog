@@ -123,9 +123,6 @@
 	the 28-byte settings layout, accept compatible legacy
 	preferences and report configuration errors.
 
-	* tests/test_settings_encoding.c: Add tests for tagged I/O
-	factors, legacy preference values and buffer-size boundaries.
-
 2026-11-14  Jörgen Johansson
 
 	* utils/ixpipe-handler.c: Fix signal interruption races during
