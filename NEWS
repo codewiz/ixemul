@@ -29,10 +29,12 @@ Corrected resolv.h dependencies so required network types and
 definitions are available independently of header inclusion order.
 Improved ptrdiff_t compatibility with GCC 2.95.3 and newer GCC versions,
 avoiding conflicting type definitions in C and C++ applications.
-Updated sys/time.h declarations for better compatibility with newlib,
-libnix and the AmigaOS NDK 3.2 timer definitions.
-Improved Unix group handling, including more reliable retrieval
-of supplementary groups and better error handling.
+Added constructor and destructor initialization support using
+__CTOR_LIST__ and __DTOR_LIST__, with atexit() integration and
+compatibility with GCC 2.95.3. Updated sys/time.h declarations for
+better compatibility with newlib, libnix and the AmigaOS NDK 3.2 timer
+definitions. Improved Unix group handling, including more reliable
+retrieval of supplementary groups and better error handling.
 
 Filesystem and POSIX compatibility
 ----------------------------------
@@ -43,9 +45,9 @@ immediately. Reads return EOF, while subsequent writes fill the gap
 with zeroes. File positions are shared correctly between duplicated
 descriptors, including those created with dup() and dup2(). Improved
 file truncation and error handling for AmigaOS filesystem handlers,
-including better compatibility with ENV: files.
-Improved read() and write() reliability, including better handling
-of partial transfers, interrupted operations and I/O errors.
+including better compatibility with ENV: files. Improved read() and
+write() reliability, including better handling of partial transfers,
+interrupted operations and I/O errors.
 
 Filesystem I/O configuration
 ----------------------------
