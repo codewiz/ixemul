@@ -1,0 +1,842 @@
+2026-11-24  JJ
+
+	* ixprefscheck.c: Use ssize_t for write() results, retry
+	  interrupted writes, and preserve error information during
+	  output-file cleanup.
+
+2026-11-22
+
+	* library/read.c: Return EBADF instead of EIO when a valid
+	file descriptor is not open for reading. Ensure correct
+	POSIX error reporting, including zero-length reads.
+
+	* library/write.c: Return EBADF instead of EIO when a valid
+	file descriptor is not open for writing. Ensure correct
+	POSIX error reporting, including zero-length writes.
+
+2026-11-19  Jörgen Johansson
+
+	* libsrc/crt0.c: Add constructor and destructor initialization
+	support using __CTOR_LIST__ and __DTOR_LIST__, with atexit()
+	integration. Preserve GCC 2.95.3 compatibility.
+
+	* library/ix_open.c: Restore the saved task user pointer on
+	initialization failure also in NOTRAP builds. Restore tc_Switch
+	with the other task hooks. Close timer.device before releasing
+	its I/O request when a later initialization step fails after
+	OpenDevice() succeeds.
+
+	* library/ix_close.c: Restore the saved task user pointer after
+	cleanup in TRAP and NOTRAP builds, before freeing the process
+	user structure. Avoid leaving a dangling task-context pointer
+	after CloseLibrary().
+
+2026-11-18  Jörgen Johansson
+
+	* library/_main.c: Add usetup in get_global_environment() so the
+	process-local user pointer is available when the allocation-size
+	overflow check sets errno to ENOMEM.
+
+	* utils/ixpipe-handler.c: Include <signal.h> for declarations of
+	sigblock() and sigsetmask() used by packet ownership protection;
+	<sys/signal.h> alone does not declare them.
+
+	* stdlib/atexit.c: Handle SYS_malloc() failure before initializing
+	the first atexit handler block. Return -1 with errno set to ENOMEM
+	on allocation failure, including when adding more handler blocks.
+	Preserve existing LIFO callback ordering.
+
+2026-11-17  Jörgen Johansson
+
+	* utils/Makefile, utils/Makefile.in: Add ixprefscheck to the
+	default build and provide a separate build target for the new
+	preferences validation utility.
+
+	* utils/localtime.c: Correct the TZ="" timezone case, initialize
+	wildabbr with the intended WILDABBR value, and fix the order used
+	to read ttisstdcnt and ttisgmtcnt from timezone data.
+
+	* library/select.c: Remove redundant i < nfd checks in FASYNC
+	handling, a dead readydesc assignment, and unnecessary conditional
+	expressions when casting possibly NULL descriptor sets. Preserve
+	select() behavior.
+
+	* include/machine/ansi.h: Adjust the _BSD_PTRDIFF_T_ definition to
+	avoid conflicting ptrdiff_t declarations with newer GCC headers.
+
+	* include/stddef.h: Correct ptrdiff_t declaration for compatibility
+	with GCC 2.95.3 and newer GCC versions after the machine/ansi.h
+	change.
+
+	* library/_main.c: Harden ENV: scanning against changing directory
+	contents and oversized allocations. Bound the second scan by the
+	allocated entry count, skip invalid files and failed stat()/open()
+	operations, and preserve existing environment filtering.
+
+2026-11-16  Jörgen Johansson
+
+	* library/ftruncate.c: Verify the actual EOF after a
+	SetFileSize() call that did not return -1, using Seek(OFFSET_END)
+	and Seek(OFFSET_CURRENT), instead of comparing the returned size
+	with the requested one. The ENV: handler truncates the file but
+	returns its previous length; the old check turned that into EIO,
+	which since open.c 1.10 made open(O_TRUNC) on an existing ENV:
+	file fail and ixprefs unable to save ENV:ixemul.prefs. Accept a
+	requested size only when the observed EOF matches. Preserve -1
+	failures and logical file-position restoration.
+
+	* ixprefscheck.c (new): Add a standalone C89 tool to inspect and
+	convert ixemul.prefs files. Validate the 28-byte layout, legacy
+	and tagged 80.3 settings, supported flags, network modes and the
+	512 KiB I/O limit. Warn about MEMBUF values above zero; require
+	an explicit --zero-membuf option to clear them during
+	conversion. Never overwrite an existing output file.
+
+	* utils/ixprefs.guide: Document the three filesystem I/O
+	settings, the tagged 28-byte preferences format, compatibility
+	with older releases, the 512 KiB limit and the MEMBUF
+	restriction. Add ixprefscheck usage, validation, conversion and
+	ENV:/ENVARC: guidance.
+
+	* static/localtime.c: Improve the tzsetwall() fallback when the
+	default timezone file is unavailable. This change has not yet
+	been approved or regression-tested.
+
+2026-11-15  Jörgen Johansson
+
+	* library/ixemul.h, library/ix_settings.c: Store the
+	physical-block count and 1x/2x I/O multiplier in a tagged
+	fs_buf_factor, preserving the 28-byte preferences layout. Decode
+	legacy factors, keep the live effective factor untagged and
+	validate configurations against the 512 KiB limit.
+
+	* utils/amiga_gui.c, utils/amiga_gui.h, utils/amiga.c,
+	utils/amiga_functions.c: Provide independent GUI controls for
+	filesystem block size, physical blocks and I/O buffer
+	multiplier. Update integer gadgets through GadTools and refresh
+	settings consistently when applying, resetting or restoring
+	preferences.
+
+	* utils/cli.c, utils/main.c, utils/ixprefs.h, utils/util.c:
+	Support -b/--fs-buf-factor, -B/--block-size and
+	-X/--io-multiplier. Validate the combined buffer size, preserve
+	the 28-byte settings layout, accept compatible legacy
+	preferences and report configuration errors.
+
+	* tests/test_settings_encoding.c: Add tests for tagged I/O
+	factors, legacy preference values and buffer-size boundaries.
+
+2026-11-14  Jörgen Johansson
+
+	* utils/ixpipe-handler.c: Fix signal interruption races during
+	IXPIPE descriptor initialization and shutdown. Protect
+	F_INTERNALIZE and packet replies against premature signal
+	delivery. Block Unix signals during final descriptor cleanup to
+	prevent incomplete closes.
+
+	* library/stat.c: Use configured filesystem block size instead
+	of querying AmigaDOS Info(). Convert allocated blocks to
+	512-byte units with overflow protection, and remove the old 32
+	KiB cap.
+
+	* library/__fstat.c: Use configured block size instead of cached
+	Info() data. Remove extra lock/Info() work and the old 32 KiB
+	cap while preserving the existing ExamineFH() fallback.
+
+2026-11-13  Jörgen Johansson
+
+	* library/ftruncate.c: Reject ftruncate() on interactive
+	AmigaDOS handles with EINVAL before Seek() or SetFileSize(),
+	preventing virtual offsets on console handles.
+
+2026-11-12  Jörgen Johansson
+
+	* library/lseek.c: Reject lseek() on interactive AmigaDOS file
+	handles with ESPIPE. Prevent virtual file positions from being
+	activated on console handles, which could cause subsequent reads
+	to return a false EOF. Preserve POSIX sparse-file handling for
+	regular files.
+
+	* library/__fselect.c: Check the return value of __get_file() in
+	the SELCMD_POLL path. Return EINTR on lock acquisition failure
+	without accessing the file handle or releasing a lock that was
+	not acquired.
+
+	* library/ix_open.c: Preserve the original kmalloc() allocation
+	pointer when calculating stack usage bounds. Use a separate
+	variable for the stack address to prevent an invalid kfree() if
+	initialization fails with stack monitoring enabled.
+
+	* include/sys/time.h: Add _TIMEVAL_DEFINED to prevent duplicate
+	struct timeval definitions with AmigaOS NDK 3.2, newlib and
+	libnix. Use anonymous unions for POSIX and AmigaOS field names
+	with GCC 3 and later. Provide macro aliases for GCC 2.95.3,
+	which does not support anonymous union members in C. Preserve
+	the 8-byte timeval layout and compatibility with older NDK
+	headers regardless of inclusion order. Reported by Bernie
+	Innocenti (AmigaPorts, PR #349).
+
+	* library/__read.c: Correct FNDELAY handling to preserve bytes
+	already read when a subsequent Read() fails, and treat a
+	zero-length Read() result as EOF. Preserve the original errno if
+	physical-position restoration fails. Handle simultaneous
+	NL-to-CR and CR-to-NL mappings correctly. Remove redundant
+	assignments and checks, and correct damaged comments.
+
+	* library/__write.c: Restore the original file position when the
+	first zero-fill Write() fails without writing data. Ensure
+	failed AmigaDOS operations produce nonzero errno, using EIO when
+	error conversion returns zero. Preserve the number of input
+	bytes already consumed when a subsequent interactive chunk or
+	CRLF write fails. Remove a redundant length check, preserve
+	const correctness and fix comments.
+
+	* library/__tioctl.c: Check __get_file() before accessing the
+	file object. Restore the signal mask and return EINTR if
+	acquiring the file fails. Correct the INLCR mapping comment.
+
+	* library/buddy-alloc.c: Reduce the allocation header to eight
+	bytes by encoding the pool ID in the magic tag and removing the
+	redundant total-size field. Remove unreachable overflow checks
+	while retaining size validation and pool selection. Correct
+	allocation-class boundaries for the smaller header. Add GCC
+	2.95.3- compatible compile-time assertions for header size,
+	alignment and 32-bit integer types. Preserve existing pool
+	allocation, locking and direct-allocation behavior.
+
+2026-11-11  Jörgen Johansson
+
+	* library/lseek.c: Restore the fast path for zero-offset
+	SEEK_CUR queries. Return an active virtual position without
+	AmigaDOS calls, or query the physical position using a single
+	Seek(OFFSET_CURRENT). Preserve existing error handling and leave
+	virtual-position state unchanged on the fast path.
+
+	* ChangeLog: Standardize formatting, indentation, line width and
+	file path notation throughout the version 80.x entries to ensure
+	consistent presentation. Documentation only.
+
+	* general/arith.c: Replace the softfloat __fixdfsi() conversion
+	with an FPCR-independent IEEE-754 implementation. Fix the
+	softfloat regression introduced by the trap.S FPCR change in
+	version 80.2, which caused incorrect floating-point output.
+	Verified with 28 conversion tests across two FPCR settings.
+
+	* stdlib/qsort.c: Adopt an adapted NetBSD 2025 Bentley-McIlroy
+	quicksort with three-way partitioning, improved pivot selection
+	and faster aligned element swaps. Preserve the qsort() API and
+	compatibility with GCC 2.95.3 and m68k. Sorting tests passed.
+
+	* stdlib/heapsort.c: Adopt an adapted NetBSD 2025 heapsort with
+	improved sift-down, size_t indexing and corrected pointer
+	arithmetic. Preserve the heapsort() API. Sorting tests passed.
+
+2026-11-10  Jörgen Johansson
+
+	* library/lseek.c: Optimize regular-file lseek() by reducing
+	AmigaDOS Seek() calls from five to three in the normal path.
+	Use Seek()'s previous-position return value when moving to EOF,
+	avoiding an unnecessary intermediate restoration. Preserve
+	logical positions beyond EOF and existing error handling.
+
+	* library/lseek.c: Use BPTR instead of struct FileHandle
+	pointers for AmigaDOS file handles. Eliminate GCC 2.95.3
+	pointer/integer conversion warnings without changing lseek()
+	behavior.
+
+	* library/__read.c: Correct AmigaDOS file handle types to BPTR
+	in virtual-offset read handling and physical-position
+	restoration. Preserve existing read and TTY behavior.
+
+	* library/__write.c: Correct the AmigaDOS file handle type to
+	BPTR in virtual-offset write preparation. Preserve existing
+	write and TTY behavior.
+
+2026-11-09  Jörgen Johansson
+
+	* library/lseek.c: Implement POSIX-compatible logical file
+	positions beyond EOF without extending the file until a
+	subsequent write(). Handle SEEK_SET, SEEK_CUR and SEEK_END
+	correctly. Validate offsets and file locking, preserve errors
+	and restore file positions on failure where possible. Allow
+	DTYPE_MEM seeks beyond EOF.
+
+	* library/__read.c, library/__write.c: Support logical file
+	positions beyond EOF. Return EOF for reads beyond the physical
+	file size. Fill gaps with zeroes when writing beyond EOF,
+	preserving normal file positioning and error handling.
+
+	* library/ftruncate.c: Preserve logical file positions when
+	resizing files. Correct error handling and retain the existing
+	AmigaDOS filesystem compatibility workaround.
+
+	* library/kern_descrip.c, include/sys/file.h: Add shared logical
+	file-position state to struct file. Initialize it for new
+	descriptors and preserve shared position semantics across dup()
+	and dup2(). Propagate __fstat() failures correctly.
+
+	* library/__fioctl.c, library/__fstat.c: Account for logical
+	file positions beyond EOF while preserving physical file size
+	reporting. Improve error handling and position restoration.
+
+	* library/open.c: Reset logical file-position state when
+	converting a regular file to DTYPE_MEM. Report O_TRUNC failures
+	and close the descriptor while preserving the original errno.
+
+	* library/__mread.c: Handle logical positions beyond EOF for
+	memory-backed files. Check file locking and prevent reads
+	outside the allocated buffer.
+
+	* stdlib/radixsort.c: Replaced the original Berkeley
+	implementation with the NetBSD radix sorting algorithms,
+	providing both radixsort() and sradixsort(). Adapted the code
+	for ixemul and GCC 2.95.3 compatibility. Added argument
+	validation, reentrant sorting state, safer stack handling and
+	overflow protection. Use reallocarray() for stable sorting while
+	preserving the original sorting semantics.
+
+	* library/group.c: Fix out-of-bounds access when copying
+	secondary groups from MultiUser in getgroups(). Free the
+	extended owner information when the output buffer is too small.
+	Allow getgroups(0, NULL) to return the number of groups without
+	copying them, and reject negative buffer lengths with EINVAL.
+	Check group list capacity before adding entries in initgroups().
+	Preserve existing setgroups() behavior and group ordering.
+
+	* ixnet/getaddrinfo.c: Return both TCP and UDP results when
+	socket type and protocol are unspecified. Resolve named services
+	separately for each protocol, omitting unsupported combinations.
+	Preserve existing IPv4 resolution, memory management and error
+	cleanup behavior.
+
+	* ixnet/getgrent.c: Reject NULL group names with EINVAL.
+	Validate numeric group IDs using strtol() and the valid gid_t
+	range. Accept a final complete group entry without a trailing
+	newline while continuing to reject overlong input lines.
+
+	* ixnet/getnameinfo.c: Treat zero-length output buffers as
+	omitted results and return EAI_NONAME when neither output is
+	requested. Return EAI_NONAME for conflicting NI_NUMERICHOST and
+	NI_NAMEREQD flags. Document the NI_NOFQDN limitation without
+	changing the existing IPv4 resolver behavior.
+
+	* library/basename_b.c: Avoid undefined pointer subtraction
+	between separate string literals for NULL or empty paths by
+	using a single static dot array. Use memmove() instead of
+	memcpy() to support overlapping source and destination buffers.
+
+	* library/convert_dir.c: Check LockDosList() before traversing
+	the AmigaDOS volume list. Avoid calling NextDosEntry() or
+	UnLockDosList() when locking fails. Preserve and translate the
+	DOS error from __lock() instead of unconditionally returning
+	ENOENT. Retain the special handling of the Unix root directory.
+	Remove redundant pathname termination after a successful
+	NameFromLock() call.
+
+2026-11-08  Jörgen Johansson
+
+	* ChangeLog: Add the previously omitted 2026-10-26 entry for C99
+	integer scanning modifiers in library/vfscanf.c. Documentation
+	only; no source code changes.
+
+	* library/convert_dir.c: Improved directory conversion error
+	handling and buffer allocation safety. Grow the buffer to fit
+	each complete, even-byte-padded entry. Avoid NULL-pointer
+	arithmetic during initial allocation and check for size
+	overflow. Reset buffer pointers after allocation failure.
+
+	Check Examine() and NameFromLock() results before use.
+	Distinguish normal ExNext() completion from AmigaDOS errors.
+	Free allocated buffers on failure and preserve errno across
+	cleanup and directory unlocking.
+
+	* library/open.c: Preserve errno from convert_dir() when
+	directory conversion fails, preventing open() from overwriting
+	the error with the previous falloc() result.
+
+	* library/ix_sem.c: Protect lazy mutex initialization with
+	Forbid()/Permit() and recheck the initialized flag inside the
+	critical section. Prevent concurrent tasks from initializing the
+	same SignalSemaphore twice. Preserve existing locking and
+	signal-mask behavior.
+
+2026-11-06  Jörgen Johansson
+
+	* stdlib/bsearch.c: Changed the remaining element count from int
+	to size_t to avoid narrowing large nmemb values. Updated the
+	comparison callback prototype to match stdlib.h. Preserved the
+	original binary search algorithm and ABI.
+	
+	* stdlib/qsort.c: Corrected comparison callback declarations to
+	match stdlib.h. Added checks for zero-sized elements and size
+	overflow. Changed internal partition sizes to size_t and
+	corrected insertion sort pointer arithmetic to avoid
+	out-of-bounds pointers. Preserved the original sorting algorithm
+	and thresholds.
+
+	* stdlib/div.c: Fixed incorrect remainder calculation for
+	negative divisors. Removed obsolete sign normalization and use
+	GCC's signed division semantics directly. Avoid signed overflow
+	when negating INT_MIN.
+
+	* stdlib/ldiv.c: Fixed incorrect remainder calculation for
+	negative divisors. Removed obsolete sign normalization and use
+	GCC's signed division semantics directly. Avoid signed overflow
+	when negating LONG_MIN.
+
+	* string/swab.c: Removed a redundant TST.L instruction after
+	loading the byte count in all CPU-specific implementations.
+	MOVE.L already sets the condition codes required by the
+	negative-count check. No change to functionality or byte-count
+	semantics.
+
+2026-11-05  Jörgen Johansson
+
+	* library/shm.c: Fixed System V shared memory handling.
+	Zero-initialize newly allocated segments. Handle shmat()
+	reallocation failures without losing the original allocation or
+	modifying attachment counts and metadata. Reject shmdt()
+	requests for segments not attached by the calling process. Use
+	memmove() instead of memcpy() for overlapping attachment list
+	entries.
+
+	* library/sysv_sem.c: Validate all semaphore indices before
+	applying semop() operations. Prevent partial semaphore value
+	changes when a later operation specifies an invalid sem_num and
+	semop() returns EFBIG.
+
+	* library/sysv_sem.c: Restore the original NetBSD source header,
+	correcting the file identification and description.
+	Documentation only; no functional changes.
+
+	* ChangeLog: Add the previously omitted 2026-10-29 entry for
+	the usetup declaration fixes in library/pipe.c. Documentation
+	only; no source code changes.
+
+	* ChangeLog: Remove the duplicate explicit_bzero.c entry dated
+	2026-09-29. Retain the entry dated 2026-09-23, matching revision
+	1.2 in the source file. No source code changes.
+
+	* library/select.c: Restore the non-diagnostic version after a
+	test-only version was mistakenly included in the 80.2 release
+	candidate. The test version contained SIGUSR1 injection
+	controlled by IXEMUL_PREWAIT_DIAG. The test code ran only on the
+	blocking wait path, not when descriptors were immediately ready
+	or the timeout was zero.
+
+	* library/select.c: Add the revision 1.17 comment, dated
+	2026-09-21, after the fact to document the existing <strings.h>
+	include for the bzero() prototype used by FD_ZERO().
+
+2026-11-03  Jörgen Johansson
+
+	* include/resolv.h: Include sys/types.h, netinet/in.h and
+	arpa/nameser.h to provide the required network types and
+	MAXDNAME definition independently of header inclusion order.
+
+2026-11-02  Jörgen Johansson
+
+	* include/sys/signal.h: Use explicit (int) prototypes for
+	sigaction.sa_handler and SIG_DFL, SIG_IGN and SIG_ERR. Fix C23
+	compatibility with newer GCC versions while preserving existing
+	structure layout and legacy interfaces.
+	Reported by Bernie Innocenti (AmigaPorts, issue #279).
+
+2026-11-01  Jörgen Johansson
+
+	* library/sysv_sem.c: Preserve the semaphore sequence number
+	before converting semid to a table index in ix_semctl() and
+	ix_semop(). Use the saved sequence when validating the semaphore
+	identifier, including checks after an interrupted wait.
+
+	* ChangeLog: Add the missing 2026-10-27 entry for
+	general/random.c. The entry was omitted from the previously
+	assembled ChangeLog. This corrects the documentation only; no
+	source code changes.
+
+2026-10-29  Jörgen Johansson
+
+	* library/unlink.c: Initialize file metadata with SYS_stat
+	before using st_mode to clear delete protection. Preserve errors
+	from stat() and chmod() instead of using an uninitialized mode
+	value.
+
+	* library/pipe.c: Restore the required usetup declaration in
+	pipe_rollback_file() for access to u.u_ofile. Remove the unused
+	usetup declaration from __pclose().
+
+2026-10-28  Jörgen Johansson
+
+	* library/unp.c: Replace single-task select/poll notification
+	with support for multiple concurrent waiters on AF_UNIX sockets
+	and listeners. Maintain per-object waiter lists and signal all
+	registered waiters when relevant socket state changes.
+
+	* library/pipe.c: Notify every registered stream select/poll
+	waiter when a pipe endpoint closes.
+
+	* include/sys/unix_socket.h: Add waiter structures and lists for
+	concurrent select/poll registrations.
+
+	* include/user.h: Add per-process select/poll waiter tracking to
+	support cleanup of outstanding registrations.
+
+	* library/ix_close.c: Release process-owned select/poll waiter
+	registrations during process cleanup, before signal resources
+	are freed.
+
+	* stdlib/execve.c: Clean up outstanding select/poll
+	registrations on successful exec. Preserve registrations when
+	exec fails.
+
+2026-10-27  Jörgen Johansson
+
+	* general/random.c: Convert initstate(), setstate() and random()
+	from K&R-style definitions to ANSI C prototypes matching
+	stdlib.h. Update the local random() declaration in srandom().
+	Preserve the existing random-number generator algorithm and
+	behavior.
+
+2026-10-26  Jörgen Johansson
+
+	* library/__mselect.c: Fix DTYPE_MEM read readiness reporting at
+	EOF. A read at EOF completes immediately and must therefore be
+	considered ready by select().
+
+	* library/open.c: Restore the file offset to zero when MEMBUF
+	preloading fails after a partial read, preventing subsequent
+	reads from starting at the wrong position.
+
+	* include/assert.h: Replace the dependency on libgcc's
+	__eprintf() with fprintf(stderr, ...) and abort(). Preserve
+	compatibility with older compilers, traditional C, C++, and
+	existing NDEBUG handling.
+	Reported by Bernie Innocenti (AmigaPorts).
+
+	* include/inttypes.h: Add C99 integer format macros for
+	fixed-width, least-width, fast-width, maximum-width, and
+	pointer-sized integer types. Match ixemul's existing stdint.h
+	definitions and m68k ABI. Provide compatible printf() and
+	scanf() format specifiers.
+	Compatibility issue reported by Bernie Innocenti (AmigaPorts).
+
+	* library/vfscanf.c: Add C99 integer scanning modifiers hh, j, z
+	and t. Use ixemul/m68k destination types for signed and unsigned
+	input, including the corresponding %n forms. Preserve existing
+	h, l, ll and q integer conversion paths.
+
+	* library/trap.S: Initialize FPCR to 0 (round to nearest,
+	extended precision) instead of 0x90 (round toward zero, double
+	precision) when resetting the FPU. Correct the outdated ANSI C
+	rounding comment. Preserve the existing CPU-specific FPU reset
+	sequence. Reported and suggested by Bernie Innocenti
+	(AmigaPorts).
+
+	* BUGS: Document a reported MEMBUF-related compiler/linker
+	failure and the MEMBUF=0 workaround.
+
+2026-10-25 Jörgen Johansson
+
+	* BUGS_SIGWINCH: Removed obsolete documentation for the SIGWINCH
+	issue.
+
+	* Makefile.in: Remove obsolete README.pOS references from the
+	distribution targets.
+
+	* manifests/src: Remove the README.pOS entry from the source
+	manifest.
+
+	* README.pOS: Remove obsolete pOS documentation from the
+	distribution.
+
+2026-10-24  Jörgen Johansson
+
+	* library/termios.c: Revert to the original 1997 version,
+	replacing the previously modified file. The original KPRINTF()
+	calls are already controlled by DEBUG_VERSION in kprintf.h.
+
+	* utils/amiga_gui.c: Add a revision comment dated 2026-04-28 to
+	document previously implemented changes. No functional changes.
+
+	* utils/ixpipe-handler.c: Correct the version number from 1.1 to
+	1.2 and update the $VER date to 2026-07-02. Complete the
+	revision comment to document the previously implemented 256-byte
+	BSTR buffer fix. No functional changes.
+
+	* utils/localtime.c: Keep tzsetwall() externally linked to match
+  	ixemul/header declarations and avoid static-after-non-static
+  	warnings, consistent with the existing static/localtime.c fix.
+
+2026-10-23  Jörgen Johansson
+
+	* library/bcmp.c: Remove redundant TST.L instructions after
+	MOVE.L in the 68020/030, 68040 and 68060 entry paths.  MOVE.L
+	already sets the zero flag.  Leave the 68000/010 path unchanged.
+
+	* library/memset.c: Replace the C byte-fill loop with an
+	optimized m68k assembler implementation.  Use a byte loop for
+	fills shorter than 12 bytes and longword stores for larger
+	fills. Align destinations to four-byte boundaries on 68020+ and
+	even addresses on 68000/010.  Preserve the calling convention
+	and memset() semantics.
+
+2026-10-22  Jörgen Johansson
+
+	* library/bzero.c: Remove the redundant TST.L instruction before
+	the zero-length check. The preceding MOVE.L already sets the
+	zero flag, so the check remains effective. The TST.L instruction
+	had been added without documentation sometime before revision
+	1.1.
+
+2026-10-21  Jörgen Johansson
+
+	* library/__mclose.c: Avoid freeing inline-stored filenames from
+	struct file. Only call kfree() for separately allocated
+	filenames while preserving existing memory-buffer cleanup and
+	close behavior.
+
+	Setting Membuf to 16384 in ixprefs enables memory buffering for
+	small files, causing them to use __mclose() when closed. This
+	exposed an invalid kfree() of inline-stored filenames introduced
+	in ixemul 80.0. Reported by Bernie Innocenti (AmigaPorts).
+
+2026-10-20  Jörgen Johansson
+
+	* library/bcopy.c: Optimized small-block copying in the
+	68020/30, 68040 and 68060 implementations by using the existing
+	longword/remainder paths where appropriate. Removed redundant
+	tstl instructions from all CPU-specific implementations.
+
+2026-10-19  Jörgen Johansson
+
+	* library/ix_sigwinch.c: Harden SIGWINCH/input.device handler
+	lifetime management. Check IND_ADDHANDLER and IND_REMHANDLER
+	completion, avoid freeing the request after failed removal, and
+	separate input-handler state from struct user. The handler now
+	uses a dedicated state object containing the task, watched
+	window, input.device request, interrupt and active flag. Mark
+	the state inactive before teardown and free it only after
+	successful handler removal, so input.device cannot dereference
+	process data that is being destroyed.
+	
+	* include/user.h: Add a forward declaration for the private
+	SIGWINCH state and append u_sigwinch_state to struct user so
+	existing member offsets remain unchanged.
+
+	* static/localtime.c: Add ctime_r() using caller-provided
+	character storage; retain the existing ctime() implementation. *
+	static/asctime.c: Integrate Olson tzcode asctime.c 7.9, adding
+	asctime_r() and sharing formatting with asctime() while
+	preserving asctime() output behavior. * include/time.h: Declare
+	gmtime_r(), localtime_r(), ctime_r() and asctime_r() as public
+	libc interfaces.
+
+2026-10-13  Jörgen Johansson
+
+	* static/localtime.c: Add gmtime_r() and localtime_r() using the
+	existing gmtsub() and localsub() conversion routines and
+	caller-provided struct tm storage. localtime_r() calls tzset()
+	before conversion, matching localtime() timezone initialization.
+	Preserve existing time conversion behavior.
+
+2026-10-09  Jörgen Johansson
+
+	* library/ix_expunge.c: Close multiuser.library and clear muBase
+	during library expunge.
+
+2026-10-08  Jörgen Johansson
+
+	* library/ix_init.c: Close multiuser.library and clear muBase if
+	initialization fails after the library has been opened.
+
+2026-09-30  Jörgen Johansson
+
+	* include/math-68881.h: Add C99 round() and trunc() support for
+	the 68881/68882 math path. Use fintrz for truncation and
+	implement round() with C99 round-half-away-from-zero semantics.
+
+2026-09-28  Jörgen Johansson
+
+	* include/string.h: Add missing public declarations for
+	explicit_bzero(), fls(), strlcpy() and strlcat(). These
+	functions were already provided by ixemul.library but were not
+	exposed by the public header.
+
+	* include/stdint.h: Add public declarations for popcount32() and
+	popcount64(), using uint32_t and uint64_t to match the public
+	NetBSD-style interface. The underlying ixemul implementations
+	continue to use the ABI-compatible u_int32_t and u_int64_t
+	types.
+
+	* library/stat.c, library/__fstat.c: Cap reported st_blksize at
+	32 KiB. Some Amiga filesystem handlers return deliberately
+	scaled id_BytesPerBlock values through Info(), and multiplying
+	these by ixemul's historical filesystem buffer factor could
+	otherwise produce excessively large preferred I/O sizes.
+	Preserve the raw id_BytesPerBlock value for st_blocks accounting
+	and the existing per-file block-size cache.
+
+	* library/vfprintf.c: Added support for the C99 integer length
+	modifiers z, j and t. On the ixemul/m68k ABI, z maps to the
+	existing long-integer path for size_t, j to the 64-bit
+	quad-integer path for intmax_t/uintmax_t, and t to the normal
+	integer path for ptrdiff_t. This also enables the corresponding
+	%zn, %jn and %tn conversions through the existing %n handling.
+
+2026-09-27  Jörgen Johansson
+
+	* library/buddy-alloc.c: Validate the size passed to b_free()
+	against the recorded allocation size. Added allocation headers
+	to direct AllocMem() blocks as well as pooled blocks, and always
+	use the recorded base address and size when releasing memory.
+
+	* library/memcmp.c: Added a separate assembler path for 68020
+	and later processors, derived from the existing 68000/010
+	implementation. The 020+ path omits the address-parity checks
+	required on 68000/010 because these processors support unaligned
+	longword accesses. Retained the short-input fast path, longword
+	comparison loop, byte tail and bytewise resolution of differing
+	longwords.
+
+	* library/ix_init.c: Check that the global file-table allocation
+	succeeded before calculating pointers into the table. If task
+	switcher creation fails, free the file table, clear its
+	pointers, clean up the allocator and close the supporting
+	libraries before returning initialization failure.
+
+2026-09-25  Jörgen Johansson
+
+	* BUGS: Documented the remaining rare SIGWINCH/input.device
+	teardown freeze.
+
+	* TODO: Added notes for further investigation of
+	__ix_remove_sigwinch(), handler lifetime, process-exit ordering
+	and possible teardown hardening.
+
+	* BUGS_SIGWINCH: Added document describing the SIGWINCH issue.
+
+2026-09-24  Jörgen Johansson
+
+	* Corrected missing, truncated, anonymous or incorrectly
+	attributed copyright and licence notices introduced during
+	automated source-header updates, restoring the original upstream
+	provenance where applicable.
+
+	Affected files: __close.c, __fselect.c, __read.c, __tioctl.c,
+	__write.c, close.c, nanosleep.c, sysv_sem.c, fls.c, strlcat.c,
+	memmem.c, memmove.c, mempcpy.c, strnlen.c, strndup.c,
+	getaddrinfo.c, getnameinfo.c, strlcpy.c, stpcpy.c, swab.c,
+	posix_memalign.c, buddy-alloc.c, explicit_bzero.c,
+	clock_getres.c, clock_gettime.c, clock_nanosleep.c, poll.c,
+	bcmp.c, strcmp.c, strncmp.c, basename.c, basename_b.c,
+	dirname.c, realpath.c, strtoull.c, strtoll.c, atoll.c,
+	getdelim.c and getline.c.
+
+2026-09-23  Jörgen Johansson
+
+	* library/explicit_bzero.c: Clarified the documentation
+	explaining why explicit_bzero() must remain an out-of-line
+	function.
+
+	* library/bcopy.c: Corrected the revision history by adding the
+	missing revision 1.1 entry for the CPU-specific implementations
+	and renumbering the later count-guard update from 1.1.1.2 to
+	1.2.
+
+	* library/lseekw.c, library/start.S, include/unistd.h: Completed
+	the removal of the obsolete lseekw() compatibility wrapper by
+	removing its implementation, library vector and public
+	declaration.
+
+	* BUGS: Removed the AF_UNIX datagram, connection-timeout and
+	socket-option entries. These describe planned implementation
+	work already covered by TODO, rather than bugs without an
+	obvious solution.
+
+2026-09-21  Jörgen Johansson
+
+	* library/unvis.c: Reject incomplete escape sequences at end of
+	input in strunvis() and strnunvis() instead of silently
+	accepting them.
+
+	* library/select.c: Corrected the revision history by removing
+	the incorrect statement that revision 1.15 introduced a
+	68000/68010 inline-assembly scanner.
+
+2026-09-13  Jörgen Johansson
+
+	* ixemul.library: Development for version 80.
+
+	Major work includes new libc/POSIX/BSD interfaces, AF_UNIX
+	stream sockets, poll(), clock interfaces, allocator
+	improvements, extensive TTY/PTY work, descriptor and close
+	lifetime fixes, select() rework, string/memory optimizations,
+	stdio correctness fixes, filesystem and pathname fixes, socket
+	hardening and numerous m68k-specific correctness and performance
+	improvements.
+
+	Detailed changes, dates and implementation notes are recorded in
+	the revision comments of the individual source files.
+
+2001-04-05  David Zaroski  <dez@gg.geekgadgets.org>
+
+	* (version.in): bumped version from 48.1 to 48.2 and updated
+	the date fields
+	* Finish applying patches for pOS removal
+
+2001-04-03  David Zaroski  <dez@gg.geekgadgets.org>
+
+	* (Makefile.in): comment out inline autobuilding
+	* (config.guess): Updated
+	* (config.sub): Updated
+	* (configure.in): minor change to inform user if inline headers
+	are not locatable
+	* (configure): Regenerated
+	* Additional [work in progress] removal of pOS references,
+	patches supplied by Jonathan Adamczewski
+	* (library/ixpos.h): Removed
+	* (library/ixposlib.c): Removed
+
+2001-03-29  David Zaroski  <dez@gg.geekgadgets.org>
+
+	* (library/ix_close.c): fix reading from freed memory, patch
+	from Emmanuel Lesueur
+
+2001-03-21  David Zaroski  <dez@gg.geekgadgets.org>
+
+	* Apply patches from Emmanuel Lesueur to fix enforcer hit caused
+	by forking non-ixemul programs
+
+2000-05-19  David Zaroski  <dez@cronus.ninemoons.com>
+
+	* (configure.in): Remove bogus tests
+	* (configure): Regenerated
+	* (ixnet/Makefile.in): Add proper defines of CPU/FPU selection
+	when cross compiling
+	* (library/Makefile.in): Ditto
+
+1999-07-12  David Zaroski  <zaroski@cronus.ninemoons.com>
+
+	* (library/lseek.c): fix error reporting in __extend_file()
+
+1999-06-13  Fred Fish  <fnf@ninemoons.com>
+
+	* version.in: Bump development version from 48.0 to 48.1 and
+	update the date fields.
+
+1999-03-06  David Zaroski  <zaroski@cronus.ninemoons.com>
+
+	* (configure.in): add support for cross compiling
+	* (Makefile.in) : ditto
+	* (man/Makefile.in): fix man page generation
+	* Regenerate configure
+	
+Sat May 23 23:53:18 1998  Fred Fish  <fnf@ninemoons.com>
+
+	* Makefile.in (OS): Remove pos from default list of operating
+	systems to build for.
+
+1998-03-25  Fred Fish  <fnf@ninemoons.com>
+
+	* ChangeLog: New file
+	* Makefile.in (CPU-FPU-TYPES): Add 68060.68881

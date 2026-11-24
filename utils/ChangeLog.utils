@@ -1,0 +1,107 @@
+2026-11-24  JJ
+
+	* ixprefscheck.c: Use ssize_t for write() results, retry
+	  interrupted writes, and preserve error information during
+	  output-file cleanup.
+
+2026-11-19  JJ
+
+	* ixprefscheck.c: Add a standalone C89-compatible utility to
+	  inspect and validate ixprefs settings and configuration data.
+
+	* localtime.c: Correct TZ="" handling, initialize the timezone
+	  abbreviation properly, and fix the order of TZif header counts.
+
+2026-11-15  JJ
+
+	* amiga_gui.c, amiga_gui.h: Restore the configurable physical
+	  block count, remove the warning text, and reorganize controls
+	  to avoid overlapping labels. Remove a redundant startup update
+	  and guard menu cleanup when window creation has failed.
+
+	* amiga.c: Refresh integer gadgets through GT_SetGadgetAttrs()
+	  instead of writing directly to GadTools string buffers. Refresh
+	  the three I/O settings through the normal DisplayPrefs() path.
+
+	* amiga_functions.c: Keep physical-block and block-size values
+	  independent. Read edited fields before Use/Save, and avoid
+	  redundant gadget updates after Reset, Restore and Last Saved.
+
+	* util.c: Preserve the three I/O controls in the unchanged binary
+	  settings record. Accept older compatible settings revisions
+	  and validate the combined 512 KiB limit without overflow.
+
+	* cli.c: Restore -b/--fs-buf-factor for the physical block count;
+	  retain -B/--block-size and -X/--io-multiplier. Report effective
+	  size and return errors from LastSaved().
+
+	* main.c, ixprefs.h: Preserve independent physical block count,
+	  block size and multiplier configuration state.
+
+2026-11-14  JJ
+
+	* main.c: Add configuration state for filesystem block size and
+	  the restricted I/O multiplier.
+
+	* ixprefs.h: Declare the block-size and multiplier settings,
+	  validation helpers, and block-size diagnostic interface.
+
+	* util.c: Load, validate, apply, and save filesystem block size
+	  and 1x/2x I/O multiplier. Preserve the existing settings record
+	  size and handle the legacy obsolete field as a 512-byte default.
+
+	* amiga_gui.c, amiga_gui.h: Replace the old adjustable block
+	  factor with block size and 1x/2x controls. Add a diagnostic
+	  action for AmigaDOS Info() and a short performance warning.
+
+	* amiga_functions.c: Handle the new controls, validate input,
+	  and report the current directory volume's AmigaDOS block size.
+	  Keep the preferences window open when applying settings fails.
+
+	* amiga.c: Update DisplayPrefs() to show the configured block
+	  size and I/O multiplier instead of the former block factor.
+
+	* cli.c: Replace -b/--fs-buf-factor with -B/--block-size and
+	  -X/--io-multiplier. Report effective I/O size and propagate
+	  settings apply/save failures to the command exit status.
+
+2026-09-19  JJ
+
+	* ixpipe-handler.c: Check both lseek() operations used by
+	  ACTION_SEEK and translate failures to DOS errors. Bound the
+	  ACTION_EXAMINE_FH BSTR filename to the available FileInfoBlock
+	  storage. Harden signal recovery so that a NULL or already returned
+	  DosPacket is not dereferenced.
+
+	* localtime.c: Update the timezone implementation from tzcode 7.61
+	  to 7.75. Add validation of TZif counts, record indexes and input
+	  lengths, default DST rules, the re-entrant localtime_r(), gmtime_r()
+	  and ctime_r() interfaces, and improved leap-second and mktime()
+	  handling.
+
+	* util.c: Check settings-file reads and writes, reject incompatible
+	  settings versions, fall back to defaults for invalid settings, and
+	  correct requester error formatting.
+
+	* ixstack.c: Correct mmap() failure handling, use a writable mapping,
+	  release mappings on every exit path, avoid uninitialized descriptor
+	  use, and replace implementation-dependent multi-character constants
+	  with explicit 32-bit values.
+
+	* ixtimezone.c: Store IXGMTOFFSET in an explicit five-byte format,
+	  remove structure-padding and byte-order dependencies, use the Amiga
+	  epoch constant, validate time conversion results, and make
+	  battclock.resource patch installation and removal safer.
+
+	* ixtrace.c: Replace unbounded interactive input, make SIGINT state
+	  signal-safe, correct trace-output length handling, and bound syscall
+	  formatting to the output buffer.
+
+	* ixtrace.h: Synchronize the trace table with the new
+	  ixemul.library v80 system-call interfaces.
+
+	* amiga_gui.c: Correct pointer values passed through GadTools tag
+	  lists and simplify equivalent array-address expressions.
+
+	* ixrun.c: Correct Unix-style /volume/path conversion without
+	  modifying argv[] or its strings, and correct allocation diagnostics.

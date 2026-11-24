@@ -1,0 +1,238 @@
+#### Start of system configuration section. ####
+
+# Correct srcdir/topdir based on actual build behavior:
+# Makefile *lives* in ixemul/library/
+# but make *runs* it inside ixemul/library/CPU/FPU/OS/
+# Therefore:
+#   srcdir = ixemul/library
+#   topdir = ixemul
+
+
+# True source roots (used when Makefile is executed inside CPU/FPU/OS subdirs)
+true_srcdir = ../../..
+true_topdir = ../../../..
+
+srcdir = $(true_srcdir)
+topdir = $(true_topdir)
+
+VPATH :=	$(srcdir) $(true_srcdir)
+
+# Common prefix for machine-independent installed files.
+prefix =	@prefix@
+
+# Common prefix for machine-dependent installed files.
+exec_prefix =	@exec_prefix@
+
+bindir =	$(exec_prefix)/bin
+libdir =	$(exec_prefix)/Sys/libs
+
+INSTALL =	@INSTALL@
+INSTALL_DATA =	@INSTALL_DATA@
+
+CC =		@CC@
+
+CFLAGS =	@CFLAGS@
+LDFLAGS =	@LDFLAGS@
+
+RANLIB =	@RANLIB@
+AR = @AR@
+
+#### End system configuration section ####
+
+# I *love* GNU make!
+define catenate
+/bin/echo -n creating $@...
+/bin/echo -e "$(^:%=#include \"%\"\n)" >$@
+/bin/echo done
+endef
+
+FLAVOR_CFLAGS =	-m$(CPU) -m$(FPU)
+
+# For parse_version
+ifeq ($(FPU),68881)
+DEF_CPU_FPU = -Dmc$(CPU) -D__HAVE_68881__
+else
+DEF_CPU_FPU = -Dmc$(CPU)
+endif
+
+# Correct include paths for CPU/FPU subdirectories.
+# $(srcdir) = ixemul/library
+# $(topdir) = ixemul
+
+INCS = -I$(srcdir) -I$(true_srcdir) -I$(topdir)/include -I.
+STD_CFLAGS = $(CFLAGS) $(INCS) $(OTHER_CFLAGS) -g
+ALL_CFLAGS = $(FLAVOR_CFLAGS) $(STD_CFLAGS)
+
+LIB =		library.a
+
+# CPU/FPU/OS-specific integer helper archive built in intops/.
+# The path is relative to library/$(CPU)/$(FPU)/$(OS)/.
+INTOPS_LIB =	../../../../intops/$(CPU)/$(FPU)/$(OS)/libintops.a
+
+# Strip the executable (-s), don't look for standard libraries (-nostdlib)
+# don't link in crt0.o (-nostartfiles) and tell the linker explicitly to
+# load the module from the library that defines the symbol "___load_seg"
+# (-Xlinker -u -Xlinker ___load_seg).
+
+LINKFLAGS =	-nostdlib -nostartfiles -Xlinker -u -Xlinker ___load_seg
+
+.c.o:
+		$(CC) $(ALL_CFLAGS) -c $< -o $@
+
+all:		ixemul.library ixemul.trace ixemul.debug
+
+SRC_A4 =	ix_startup.c _main.c ix_exec_entry.c exit.c ix_resident.c machdep.c ix_init.c
+SRC_MISC =	parse_version.c create_header.c tracecntl.c
+SRC_OTHERS =	hwck.c trap.c ix_timer.c debugstub.c
+OBJ_OTHERS =	$(SRC_OTHERS:.c=.o)
+
+SRC =           $(filter-out $(SRC_A4) $(SRC_OTHERS) $(SRC_MISC),$(notdir $(wildcard $(srcdir)/*.c)))
+
+SRC___ =	$(filter _%,$(SRC))
+SRC_AH =	$(filter a% b% c% d% e% f% g% h%,$(SRC))
+SRC_II =	$(filter i%,$(SRC))
+SRC_JO =	$(filter j% k% l% m% n% o%,$(SRC))
+SRC_PR =	$(filter p% q% r%,$(SRC))
+SRC_SS =	$(filter s%,$(SRC))
+SRC_TZ =	$(filter t% u% v% w% x% y% z%,$(SRC))
+
+# These are object files which explicitly get linked into the ixemul.library
+# file, in the order specified
+
+OBJ_N =		start.o tracecntl.o
+
+OBJ_T =		start.ot tracecntl.ot
+
+IXLIBS =	$(LIB) \
+		../../../../string/$(CPU)/$(FPU)/$(OS)/libstring.a \
+		../../../../general/$(CPU)/$(FPU)/$(OS)/libgeneral.a \
+		$(INTOPS_LIB) \
+		../../../../stdlib/$(CPU)/$(FPU)/$(OS)/libstdlib.a \
+		../../../../stdio/$(CPU)/$(FPU)/$(OS)/libstdio.a \
+		../../../../glue/no-baserel/libglue.a \
+		$(LIB)
+
+LIBS =		-lgcc -lamiga
+
+$(LIB) :	a4.o __.o ah.o ii.o jo.o pr.o ss.o tz.o $(OBJ_OTHERS)
+		rm -f $@
+		$(AR) rv $@ $^
+		$(RANLIB) $@
+
+ixemul.library:	$(OBJ_N) $(IXLIBS)
+		$(CC) -s $(LINKFLAGS) $(OBJ_N) $(IXLIBS) $(LIBS) -o $@
+
+ixemul.trace:	$(OBJ_T) $(IXLIBS)
+		$(CC) -s $(LINKFLAGS) $(OBJ_T) $(IXLIBS) $(LIBS) -o $@
+
+ixemul.debug:	$(OBJ_N) $(IXLIBS)
+		$(CC) -g $(LINKFLAGS) $(OBJ_N) $(IXLIBS) $(LIBS) -o $@
+
+clean:
+		rm -rf 680?0 notrap
+
+clobber:	clean
+		rm -f Makefile
+
+a4.o:	a4.c
+		$(CC) $(ALL_CFLAGS) -ffixed-a4 -c $< -o $@
+
+a4.c:	$(SRC_A4)
+		@$(catenate)
+
+__.c:	$(SRC___)
+		@$(catenate)
+
+ah.c:	$(SRC_AH)
+		@$(catenate)
+
+ii.c:	$(SRC_II)
+		@$(catenate)
+
+jo.c:	$(SRC_JO)
+		@$(catenate)
+
+pr.c:	$(SRC_PR)
+		@$(catenate)
+
+# The original rule overwrote the _KERNEL and ix.h lines because
+# catenate uses '>' and replaces the file. We fix the order so that
+# catenate runs first, then we append the required lines.
+
+ss.c:	$(SRC_SS)
+		@$(catenate)
+		@echo '#define _KERNEL' >> ss.c
+		@echo '#include "$(true_topdir)/include/ix.h"' >> ss.c
+
+tz.c:	$(SRC_TZ)
+		@$(catenate)
+
+# start.S is not located in the local CPU/FPU directory. It lives in
+# ixemul/library/, which is ../../ from here.
+
+start.o:	$(true_srcdir)/start.S version.h $(true_topdir)/include/sys/syscall.def ix_internals.h
+			$(CC) $(STD_CFLAGS) -x assembler-with-cpp -c -m68000 -msoft-float $(true_srcdir)/start.S -o $@
+
+start.ot:	$(true_srcdir)/start.S version.h $(true_topdir)/include/sys/syscall.def ix_internals.h
+			$(CC) $(STD_CFLAGS) -DTRACE_LIBRARY -x assembler-with-cpp -c -m68000 -msoft-float $(true_srcdir)/start.S -o $@
+
+# ix_open.c (and thus ii.o) depends on the size of struct user
+
+ii.o:		$(true_srcdir)/../include/user.h
+
+# Force -m68020 & -m68881 so the assembler won't bitch about fpu
+# instructions.  This means we have to leave out FLAVOR_CFLAGS.
+
+trap.o:		trap.S ix_internals.h
+			$(CC) $(STD_CFLAGS) -traditional -c -m68020 -m68881 $< -o $@
+
+# Never omit the frame pointer.
+
+ix_timer.o:	ix_timer.c
+			$(CC) $(ALL_CFLAGS) -fno-omit-frame-pointer -c $< -o $@
+
+# hwck.c checks for defines like mc68020 and __HAVE_68881__, but it also
+# must be compiled with -m68000. So we first preprocess the source with
+# standard flavor flags, and then we compile the resulting source with
+# -m68000. This ensures that when we try to use a 68020 ixemul.library on
+# a 68000 Amiga, we get a correct message and not a crash.
+
+hwck.o:			hwck.c
+				$(CC) $(ALL_CFLAGS) -E $< -o x.c
+				$(CC) $(STD_CFLAGS) -m68000 -msoft-float -c x.c -o $@
+				rm -f x.c
+
+debugstub.o:	$(true_topdir)/stack/debugstub.c
+				$(CC) $(ALL_CFLAGS) -c $< -o $@
+
+tracecntl.o:	$(true_srcdir)/tracecntl.c
+				$(CC) $(ALL_CFLAGS) -ffixed-a4 -c $< -o $@
+
+tracecntl.ot:	$(true_srcdir)/tracecntl.c
+				$(CC) $(ALL_CFLAGS) -DTRACE_LIBRARY -ffixed-a4 -c $< -o $@
+
+ix_internals.h:	create_header
+				./create_header >$@
+
+create_header:	$(true_srcdir)/create_header.c $(true_srcdir)/../include/user.h $(true_srcdir)/ixemul.h
+				gcc $(CFLAGS) $(INCS) -I$(true_srcdir) $(OTHER_CFLAGS) $(DEFS) $< -o $@
+				chmod u+x $@
+
+ii.o tz.o:		version.h
+
+# Use native compiler, which may not understand some CFLAGS
+# So force the defines of CPU and FPU via $DEF_CPU_FPU
+
+parse_version: $(true_srcdir)/parse_version.c
+				gcc $(CFLAGS) $(OTHER_CFLAGS) $(DEF_CPU_FPU) $(DEFS) $< -o $@
+				chmod u+x $@
+
+# version.in is located in the same directory as parse_version,
+# not one level above. The original rule pointed to a non-existent path.
+
+# version.in is located in ixemul/, not in library/.
+# $(srcdir) = ixemul/library
+# $(topdir) = ixemul
+
+version.h: parse_version
+	./parse_version $(true_topdir) > $@

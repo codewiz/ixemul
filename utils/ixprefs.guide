@@ -1,0 +1,1148 @@
+@database "ixprefs"
+@author "Kriton Kyrimis"
+@(c) "Copyright © 1995-1997 Kriton Kyrimis"
+@$VER: ixprefs.guide 2.8 (16.11.2026)
+
+Ixprefs v.2.8--ixemul.library configuration program
+Copyright © 1995-2001 Kriton Kyrimis
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+GUI designed using GadToolsBox 2.0c by Jan van den Baard
+80.3 supplement: 2026-11-16, ChatGPT modifications (JJ)
+
+@master "ixprefs.guide"
+
+@Node Main "ixprefs user's guide"
+                              IXPREFS
+             A configuration program for ixemul.library
+           Program version 2.8 - updated for ixemul 80.3
+                   Guide update: 16 November 2026
+
+ @{"Introduction" link introduction}
+ @{"Distribution" link distribution}
+ @{"Requirements" link requirements}
+ @{"Installation and upgrading" link installation}
+ @{"Recompiling" link recompiling}
+
+ @{"What changed in ixemul 80.3" link new803}
+ @{"The ixprefs window" link window}
+ @{"I/O settings and examples" link io_settings}
+ @{"The ixprefs menu" link menu}
+ @{"ixprefs CLI usage" link CLI}
+ @{"MEMBUF: current restrictions" link membuf}
+
+ @{"Preferences files: ENV: and ENVARC:" link files803}
+ @{"28-byte preferences file format" link format803}
+ @{"80.2 and 80.3 compatibility" link compat803}
+ @{"ixprefscheck: inspection and conversion" link check803}
+ @{"Validation and exit status" link validation803}
+ @{"Worked conversion examples" link convert803}
+ @{"Troubleshooting" link troubles803}
+
+ @{"Program history" link history}
+ @{"Author" link author}
+ @{"Acknowledgments" link acknowledgments}
+@endnode
+
+@node introduction "Introduction"
+Back when version of 41.0 of ixemul.library was released, it came with
+numerous new configuration options, one of which I wanted to use.  By playing
+with ixconfig, the configuration program that accompanied that version of the
+library, I saw that this program had two deficiencies:
+
+  a. It had almost as many command line options as UNIX ls, which are hard to
+     remember.
+  b. Making the new configuration persistent was done using a horrible kludge,
+     namely the -s option of ixconfig, which instructed ixconfig never to
+     return, to make ixemul.library unflushable.  Even if one had memory to
+     burn, permanently allocating 120+ Kbytes, just to remember the handful of
+     bits that define the configuration of ixemul.library, was a terrible
+     waste.
+
+Having a bit of spare time, I decided to try addressing these two points: By
+writing a graphical configuration program, I believe I addressed the first,
+and by not supporting the equivalent of the -s option, I hoped to give the
+maintainers of ixemul.library the incentive to read, at library startup, the
+configuration from a file similar to the one that ixprefs maintains, so that
+ixemul.library would not have to stay permanently in memory if it is to
+remember its configuration.
+
+Starting with ixemul.library version 42.0 this functionality has been
+implemented.
+
+For ixemul.library 80.3, ixprefs still identifies itself as v2.8.
+The configuration window now exposes three distinct I/O settings:
+block size, physical blocks and a restricted 1x/2x multiplier.
+See @{"What changed in 80.3" link new803} and the
+@{"preferences format" link format803} chapter for the new encoding.
+A separate @{"ixprefscheck" link check803} utility can inspect and
+convert preference files without altering live library settings.
+@endnode
+@node new803 "What's new for ixemul.library 80.3"
+The November 2026 ixprefs source update keeps the familiar program
+version 2.8 and most existing controls, but separates the preferred
+I/O configuration into three values:
+
+  Block size (bytes)                   default 512
+  Physical blocks per logical block  default 64
+  Extra I/O multiplier                default 1x (choices 1x, 2x)
+
+These are combined using the formula explained under
+@{"I/O settings and examples" link io_settings}.  The maximum
+combined size is 512 KiB (524288 bytes).
+
+The window also has a @{"Reported block size" link reportedblock}
+button to query the current AmigaDOS volume.  It is diagnostic only.
+
+The original 28-byte binary settings layout is retained.  For 80.3
+records, the previously obsolete red-zone field holds the block size
+and the factor field has a tagged representation of physical blocks
+and the 1x/2x multiplier.  See @{"File format" link format803}.
+
+Older preferences with an ordinary positive factor can still be
+interpreted by the new library.  However, older libraries cannot
+recognize the tagged 80.3 factor.  Before downgrading, see
+@{"80.2 compatibility" link compat803}.
+
+The new @{"ixprefscheck" link check803} command can inspect and
+convert files without opening the ixprefs GUI.  It never changes
+live library settings.  It is separate from the ixprefs CLI.
+@endnode
+
+@node io_settings "I/O block size, physical blocks, multiplier"
+The I/O settings describe a preferred logical I/O size used in
+ixemul's file metadata and buffering decisions.  They do NOT change
+AmigaDOS disk geometry, partition allocation or filesystem blocks.
+
+The calculation is:
+
+  Preferred I/O size = Block size * Physical blocks * Multiplier
+
+Examples:
+
+  512 * 64 * 1 =  32768 bytes =  32 KiB (default)
+  512 * 64 * 2 =  65536 bytes =  64 KiB
+ 4096 * 64 * 2 = 524288 bytes = 512 KiB (upper limit)
+ 4096 * 65 * 2 = 532480 bytes: INVALID, exceeds 512 KiB
+
+Values must satisfy all of these conditions:
+
+  Block size:       positive, no larger than 524288
+  Physical blocks: positive, no larger than 65535
+  Multiplier:      exactly 1 or 2
+  Product:         no larger than 524288 bytes
+
+The allowed number of physical blocks therefore depends on the other
+settings.  ixprefs rejects an invalid combination on Use or Save.
+The current ix_set_settings() also checks the combination and falls
+back to 512 * 64 * 1 if the block settings are invalid.  This does
+not mean that all unrelated preferences fields are fully validated.
+
+Higher I/O sizes are NOT automatically faster.  Choose values after
+measurement; the default is a conservative starting point.
+
+The GUI gadgets and their CLI equivalents are:
+  @{"Block size" link blocksize}          -B / --block-size
+  @{"Physical blocks" link blocks}       -b / --fs-buf-factor
+  @{"I/O multiplier" link iomultiplier}    -X / --io-multiplier
+@endnode
+
+@node blocksize "Block size (bytes)"
+The number of bytes in one configured basic I/O block.  The default
+for the new 80.3 sources is 512 bytes, including for ordinary old
+preferences whose unused red-zone field is zero.
+
+Unlike the physical block count, this value was not independently
+editable in the original ixprefs GUI.  For 80.3, it is stored in the
+28-byte record's offset 16 field, previously red_zone_size.
+
+The CLI option is -B N or --block-size N.  The reported volume
+size shown by @{"Reported block size" link reportedblock} may help
+with diagnosis, but it is not copied into this setting automatically.
+See @{"I/O settings" link io_settings} for the 512 KiB limit.
+@endnode
+
+@node iomultiplier "Extra I/O multiplier (1x or 2x)"
+The cycle gadget is labelled "Extra I/O multiplier" in the current
+C GUI source.  It controls an extra factor of exactly 1 or 2.
+It is sometimes described as the "I/O buffer multiplier".
+
+For example, 64 physical blocks at 512 bytes become 32 KiB at 1x
+and 64 KiB at 2x.  The multiplier is independent of the physical
+block count in the 80.3 tagged preferences format.
+
+The CLI option is -X N or --io-multiplier N, where N is 1 or 2.
+The 512 KiB combined limit applies to both settings.
+@endnode
+
+@node reportedblock "Reported block size (diagnostic)"
+Clicking "Reported block size" queries AmigaDOS Info() for the
+volume containing the program's current directory, and displays its
+reported id_BytesPerBlock value.  The operation is read-only.
+
+It is NOT a button to set the configured block size.  The reported
+number is not necessarily the best logical I/O size for ixemul.
+Values outside the typical 512-4096 byte range prompt a warning to
+verify the filesystem or handler's report.
+@endnode
+
+@node files803 "The active and persistent preferences files"
+The preferences filename is ixemul.prefs.
+
+  ENV:ixemul.prefs     Active environment preferences
+  ENVARC:ixemul.prefs  Persistent preferences for future sessions
+
+At library initialization, ixemul uses AmigaDOS GetVar() with binary
+variable handling to read the settings.  If it cannot obtain the
+expected 28-byte record, its intended fallback is the library's
+default settings.  A missing file should not by itself require
+creating a dummy preferences file.
+
+When started normally, ixprefs calls ix_get_settings() and displays
+values already held by ixemul.library.  It does not directly read
+ENVARC:ixemul.prefs just to open the GUI.
+
+Use writes ENV:ixemul.prefs; Save writes ENV:ixemul.prefs and then
+ENVARC:ixemul.prefs; Last Saved reads ENVARC:ixemul.prefs.  A
+failure to access ENVARC: therefore affects persistence and Last
+Saved, but does not alone establish the cause of a GUI-start crash.
+
+Some Amiga-compatible systems use ENV: handlers instead of a copy
+of ENVARC: in RAM:ENV.  Inspect the actual assignments and handler
+behaviour on the system concerned.  Do not assume ENV: and ENVARC:
+are the same directory or that their contents are synchronized.
+
+To inspect either existing file WITHOUT changing library settings:
+
+  ixprefscheck ENV:ixemul.prefs
+  ixprefscheck ENVARC:ixemul.prefs
+
+See @{"Troubleshooting" link troubles803} for relevant cautions.
+@endnode
+
+@node format803 "The 28-byte ixemul.prefs binary format"
+The file contains a fixed-size struct ix_settings record: seven
+consecutive 32-bit values, stored in big-endian order on m68k.
+The 80.3 revision uses the SAME 28-byte layout as older versions.
+It changes the meaning of two existing fields; it does not append
+a header or increase the file size.
+
+ Byte    Size  Field                 Meaning
+ ------  ----  --------------------  -------------------------------
+  0..3     4   version               Library major version (80)
+  4..7     4   revision              Library revision (2 or 3)
+  8..11    4   flags                 Unsigned ixemul option bits
+ 12..15    4   membuf_limit          MEMBUF maximum, in bytes
+ 16..19    4   red_zone_size /       Old: obsolete red-zone field
+              fs_blocksize          80.3: basic I/O block size
+ 20..23    4   fs_buf_factor         Old: plain physical count
+                                     80.3: possibly tagged
+ 24..27    4   network_type          0=Auto, 1=None, 2=AS225,
+                                     3=AmiTCP
+
+All fields except flags are stored as signed 32-bit values in the
+original C structure.  The 80.3 factor marker remains positive in
+a signed 32-bit integer, but must not be mistaken for a block count.
+
+LEGACY RECORD (e.g. version=80, revision=2):
+  fs_buf_factor = 64        means 64 physical blocks
+  old red_zone_size = 0     yields the default 512-byte block size
+  multiplier = 1x           no separate field in legacy format
+
+80.3 TAGGED RECORD (version=80, revision=3):
+  fs_blocksize = 512        stored at byte offset 16
+  fs_buf_factor = tagged    stored at byte offset 20
+
+The tagged factor is formed as follows:
+
+  Factor = 0x4D000000 | (2x ? 0x00010000 : 0) | blocks
+
+  Bits 31..17: marker recognized by mask 0xFFFE0000
+  Bit 16:      clear = 1x, set = 2x
+  Bits 15..0:  unsigned physical block count (1..65535)
+
+  64 physical blocks, 1x -> 0x4D000040 (1291845696 decimal)
+  64 physical blocks, 2x -> 0x4D010040 (1291911232 decimal)
+
+A complete example record (80.3, defaults, 1x) consists of these
+seven big-endian four-byte words, in on-disk order:
+
+  00 00 00 50  version = 80
+  00 00 00 03  revision = 3
+  00 00 0C 01  flags = 0x00000C01
+  00 00 00 00  MEMBUF = 0
+  00 00 02 00  block size = 512
+  4D 00 00 40  tagged factor = 64 blocks at 1x
+  00 00 00 00  network = Auto
+
+Changing only the sixth word to 4D 01 00 40 gives 2x and a total
+preferred I/O size of 65536 bytes, with the same physical count.
+
+For a 512-byte block size, those examples represent 32768 and
+65536 bytes respectively.  0x4D000040 is NOT 1291845696 blocks.
+It is an encoded field.  Do not enter it into the GUI block gadget.
+
+The library decodes tagged factors for use; its live
+ix_fs_buf_factor retains the ordinary product (blocks * multiplier).
+An untagged factor is interpreted as a plain physical block count
+with multiplier 1.  ix_get_settings() returns a tagged 80.3 record
+so the three settings can be preserved when saved again.
+
+A preliminary, untagged 80.3 draft represented a 64 * 2 setting
+as the plain factor 128.  That value cannot reveal whether it once
+meant 128 * 1 or 64 * 2.  The current reader interprets it as 128
+physical blocks at 1x, preserving the same effective I/O size.
+
+IMPORTANT: This describes the tagged encoding implemented in the
+15 November 2026 sources.  A different proposed encoding designed
+to be readable by 80.2 has NOT been implemented.  Do not confuse
+that proposal with the current on-disk format.
+@endnode
+
+@node compat803 "Compatibility with ixemul 80.2 and earlier"
+Direction matters:
+
+  80.2 preferences -> ixemul 80.3
+    Ordinary positive fs_buf_factor values are recognized as the
+    physical block count at 1x.  The normal old red-zone value of
+    zero maps to the default 512-byte block size.  On saving through
+    the updated ixprefs, the output uses the tagged 80.3 format.
+
+  80.3 tagged preferences -> ixemul 80.2
+    UNSAFE.  The old library does not know the marker and may read
+    0x4D000040 as the decimal integer 1291845696 physical blocks.
+    This can produce grossly incorrect sizes or overflow arithmetic.
+    Do NOT use a tagged 80.3 file unchanged after downgrading.
+
+  80.3 tagged preferences -> ixprefscheck --to-legacy
+    The converter produces a new revision-80.2 record.  It requires
+    a block size of 512 bytes, since the old format has no field
+    for a new block size.  For multiplier 2x it folds the multiplier
+    into the plain physical count to retain total I/O bytes.
+
+Example: 512 * 64 * 2 = 65536 is exported as 512 * 128 * 1.
+This preserves the effective size but loses the separate 64/2x
+component distinction when read again by older software.
+
+Very old records with nonzero historical red_zone_size deserve
+extra review.  The current ix_settings.c uses a positive value in
+that slot as a block size; ixprefscheck interprets the obsolete slot
+as historical data when the record is labelled older than 80.3.
+
+A preference file is a binary record, not a text file.  Its exact
+length of 28 bytes does not guarantee that the settings are valid.
+Check its contents with @{"ixprefscheck" link check803}.
+@endnode
+
+@node check803 "ixprefscheck 1.0: separate CLI utility"
+ixprefscheck is NOT the built-in ixprefs command-line interface.
+It reads a named ixemul.prefs file, displays its raw and interpreted
+values, and optionally creates a converted COPY under a new name.
+It does not invoke ix_get_settings() or ix_set_settings().
+
+ixprefscheck is built as part of the normal ixemul utils build.
+
+Usage:
+
+  ixprefscheck <preferences-file>
+  ixprefscheck --convert [--zero-membuf] <input> <new-output>
+  ixprefscheck --to-legacy [--zero-membuf] <input> <new-output>
+  ixprefscheck --help
+
+Inspect only:
+
+  ixprefscheck ENV:ixemul.prefs
+  ixprefscheck ENVARC:ixemul.prefs
+  ixprefscheck RAM:backup.prefs
+
+Output includes file version/revision, encoding, decoded flags,
+profiling mode, MEMBUF, block size, physical blocks, multiplier,
+total preferred I/O size, stored factor, network type and status.
+Inspection only reads the input file and does not update ENV:,
+ENVARC: or live ixemul settings.
+
+Conversion creates a NEW file with open(O_CREAT|O_EXCL).  If the
+target already exists, the command fails instead of overwriting it.
+The input file is never modified.  Do not direct the output to an
+existing ENV:ixemul.prefs and expect an in-place update.
+
+The utility uses ordinary C/POSIX I/O, so its executable may depend
+on the normal GCC C runtime even though it uses no ixemul settings
+API.  It is designed for C89/GCC 2.95.3; native runtime behaviour
+must still be tested on the target system.
+
+For exact acceptance rules, see @{"Validation" link validation803}.
+For migration examples, see @{"Conversion" link convert803}.
+@endnode
+
+@node validation803 "ixprefscheck validation and result codes"
+ixprefscheck performs the following checks when reading a file:
+
+ * It must be exactly 28 bytes (not shorter or longer).
+ * Version is in the supported range 47..80, revision nonnegative.
+   A version 80 record with revision above 3 is rejected.
+ * Unknown flag bits are rejected; profiling mode 3 is warned about.
+ * Network type must be 0..3 (Auto, None, AS225, AmiTCP).
+ * Block size, physical count and multiplier must be valid, with the
+   combined I/O size no more than 524288 bytes (512 KiB).
+ * A negative MEMBUF value is rejected.  A positive MEMBUF value
+   produces a warning because it is unreliable in tested 80.3 builds.
+ * A tagged factor in a legacy-labelled record produces a warning.
+ * An untagged revision 80.3 factor is treated as physical blocks
+   at 1x, with a warning about the ambiguous earlier draft.
+
+The utility reports these result classes:
+
+  RESULT: OK.         No detected errors or warnings
+  RESULT: WARNINGS.   Review the listed cautions
+  RESULT: INVALID.    File is rejected for conversion
+
+Exit status in inspection mode:
+
+   0  Settings passed all checks
+   5  Valid but warnings were issued
+  10  Error (including invalid record or file I/O error)
+  20  Incorrect command-line usage
+
+A successful conversion returns 0 after writing its new file, even
+if earlier diagnostics reported a warning that was resolved or
+accepted for conversion.  A conversion never proceeds if validation
+found an ERROR.
+
+These checks are more diagnostic than ix_set_settings() alone.  The
+library's block-limit guard makes its use of I/O factors safer, but
+it does not comprehensively reject every unknown flag or positive
+MEMBUF value.  The checker works on raw file data, so it can show
+problems that the library might silently default or ignore.
+@endnode
+
+@node convert803 "Converting preferences: worked examples"
+TO 80.3 TAGGED FORMAT:
+
+  ixprefscheck --convert old.prefs RAM:converted.prefs
+
+The new record is stamped 80.3.  The physical count and 1x or 2x
+multiplier are stored in the tagged factor, and the block size is
+stored in the former red-zone field.  A normal 80.2 file with factor
+64 produces 512 bytes, 64 blocks, 1x, total 32768 bytes.
+
+TO 80.2-READABLE LEGACY FORMAT:
+
+  ixprefscheck --to-legacy new.prefs RAM:legacy.prefs
+
+The new record is stamped 80.2, uses the plain factor, and sets the
+old red-zone field to zero.  Conversion fails if the source block
+size is not 512 bytes.  If the source uses 2x, the converter stores
+physical_blocks * 2 as the plain legacy factor.
+
+TO ZERO A POSITIVE MEMBUF LIMIT:
+
+  ixprefscheck --convert --zero-membuf old.prefs RAM:safe.prefs
+
+The source file is unchanged; only RAM:safe.prefs has MEMBUF 0.
+Without --zero-membuf, conversion of a positive MEMBUF value is
+refused.  This is deliberate, not a silent modification.
+
+SAFE PROCEDURE:
+
+  1. Make a backup of every existing preferences file.
+  2. Inspect the source with ixprefscheck (no conversion flags).
+  3. Convert to a NEW destination name, preferably on RAM:.
+  4. Inspect the new output and check the decoded settings.
+  5. Only after verification, install the chosen file into ENV:
+     and, if permanent settings are wanted, ENVARC:.
+  6. Restart or reload the library when needed to verify startup
+     behaviour; do not assume its already-loaded settings changed.
+
+The checker itself never installs converted preferences implicitly.
+Do not confuse its --convert option with ixprefs Save or Use.
+@endnode
+
+@node troubles803 "Troubleshooting settings, files and handlers"
+PREFERENCES FILE NOT FOUND:
+  ixemul's intended fallback when GetVar() cannot read a full
+  settings record is to apply defaults.  If a GUI crashes only
+  without ixemul.prefs, investigate initialization and the runtime;
+  do not assume that creating a dummy file is the correct repair.
+
+ENVARC: OR ENV: NOT ASSIGNED:
+  Check the actual assignments and storage paths before Save or
+  Last Saved.  A system using an ENV: handler need not keep a copy
+  of persistent preferences in RAM:ENV.  Assignment behaviour can
+  differ among AmigaOS-compatible systems.
+
+IXPREFS REPORTS EIO ON SAVE OR USE:
+  Some filesystem handlers have been observed to truncate a file
+  successfully while returning a non-EOF value from SetFileSize().
+  Tests on an ENV: handler showed a nonzero result even after a
+  successful truncate-to-zero.  This is an observed deviation,
+  NOT a documented rule that the result is the previous file size.
+  The ftruncate() correction proposed for ixemul 80.3 checks the
+  actual EOF while preserving POSIX file position; installation and
+  regression testing must confirm the library build used.
+
+HUGE BLOCK COUNT DISPLAYED AFTER A DOWNGRADE:
+  A tagged 80.3 file may have been read by 80.2.  For example,
+  0x4D000040 is a tag for 64 blocks at 1x, not a count of more
+  than a billion blocks.  Do not save or use that value under 80.2.
+  Convert the file with --to-legacy and inspect the new copy.
+
+MEMBUF GREATER THAN ZERO:
+  Leave it at 0 in current tested 80.3 builds; positive values have
+  caused configure failures.  See @{"MEMBUF" link membuf}.
+
+INVALID BLOCK COMBINATION:
+  The maximum preferred I/O size is 512 KiB.  Reduce the block
+  size, physical count or multiplier; see @{"I/O settings" link io_settings}.
+
+GUI CRASH AT STARTUP:
+  A separate issue from truncation during Save/Use.  Compare GUI
+  and CLI operation, the state of ENV:, library version and stack.
+  The cause must be diagnosed separately; neither ixprefscheck nor
+  the ftruncate change should be represented as a proven GUI fix.
+@endnode
+@node installation "Installation and upgrading"
+Copy ixprefs and, optionally, ixprefs.info to a suitable directory.
+The updated executable should be paired with ixemul.library 80.3
+for its new block-size and multiplier controls to be meaningful.
+
+The Makefile in the ixemul utils directory builds ixprefscheck.
+Copy the resulting executable to a directory in your command search
+path if desired.
+
+IMPORTANT: Before upgrading or downgrading, make backup copies of
+ENV:ixemul.prefs and ENVARC:ixemul.prefs wherever those files exist.
+An 80.3 tagged preference file is NOT safe for ixemul 80.2.
+Use @{"ixprefscheck" link check803} to inspect and export one if needed.
+Do not overwrite an original file while testing conversion.
+
+On classic AmigaOS, ENV: contains active environment variables and
+ENVARC: stores persistent values.  Another operating system or an
+ENV: handler may implement these paths differently.  Ensure that
+both assignments work before relying on Save or Last Saved.
+
+@endnode
+@node recompiling "Recompiling"
+Ixprefs is now integrated into the ixemul.library source distribution.
+
+The AmigaOS GUI has been designed using GadToolsBox 2.0c by Jan van
+den Baard.  The makefile patches the C code generated by GadToolsBox
+(amiga_gui.c) using a sed script, to add support for AmigaOS 3.x features.
+This script should work for other programs generated by GadToolsBox,
+so you might want to use it in other projects as well.
+
+When creating C source code from within GadToolsBox, you will create
+files amiga_gui.c and amiga_gui_temp.c.  The latter contains templates
+for all functions called to handle gadgets and menus.  If you have not
+added any new gadgets or menus, you can discard this file, otherwise cut
+the templates for the new functions and paste them to amiga_functions.c.
+
+80.3 development note (November 2026): the new gadgets were edited in
+the C source.  The old binary GadToolsBox project (amiga_gui.gui) was
+NOT updated.  Regenerating amiga_gui.c from that unmodified .gui file
+would lose the new controls.  Synchronize the GadToolsBox project
+before regenerating source from it.
+@endnode
+@node window "The ixprefs window (80.3)"
+@font topaz.font 11
+ @{"   " link amigawildcard} Amiga wildcards
+ @{"   " link case} Case sensitive pattern matching
+ @{"   " link slash} Translate / (advanced option)
+ @{"   " link noflush} Do not flush library
+ @{"   " link showstack} Show stack usage
+ @{"   " link ignoreenv} Ignore global environment (ENV:)
+ @{"   " link suppress} Suppress the "Insert volume in drive" requester
+
+ @{"      " link blocksize} Block size (bytes)
+ @{"      " link blocks} Physical blocks build one logical block
+ @{"      " link iomultiplier} Extra I/O multiplier (1x or 2x)
+ @{"      " link membuf} Membuf size
+ @{" Reported block size " link reportedblock} (read-only diagnostic)
+
+ @{"     <type>     " link networking} Network support
+ @{"     <type>     " link profiling} Profiling method
+ @{"   " link enforcer} Create Enforcer hit on trap
+ @{"   " link mufs} Enable MuFS support
+ @{"   " link advanced} Enable advanced ixprefs options
+
+ @{" Save " link save}   @{" Use " link use}   @{" Cancel " link cancel}
+
+The I/O controls are independent.  The three values determine a
+preferred logical I/O size, not the physical layout of the disk.
+See @{"I/O settings and examples" link io_settings}.
+@endnode
+@node amigawildcard "Allow AmigaOS-style wildcards"
+The ixemul.library startup code expands wildcards in the command line.  If
+this option is set, AmigaOS-style wildcards are recognized, in addition to
+UNIX-style wildcards which are always recognized.  Thus, if this option is
+set, you can use either *.c or #?.c to specify all C source files, while if
+this option is not set, you can only use *.c.
+@endnode
+@node case "Case sensitive pattern matching"
+If this option is set, pattern matching in UNIX-style wildcard expansion is
+case sensitive, i.e., *.c expands to all files ending in .c (lower case), while
+*.C expands to all files ending in .C (upper case).  If this option is not
+set, UNIX-style wildcard expansion is case insensitive (e.g., *.c expands to
+files ending in both .c and .C).
+@endnode
+@node slash "Translate /"
+If this option is set, ixemul.library interprets "/foo" as "foo:", and
+"foo//bar" as "foo/bar".
+
+Note: this option is only available on the ixprefs graphical interface if
+the @{"Enable advanced ixprefs options" link advanced} checkbox is checked.
+@endnode
+@node noflush "Do not flush library"
+If this option is set, then ixemul.library will always remain resident in
+memory, and will not be flushed when no programs are using it.  This can be
+used to ensure that the library settings are not lost by flushing and then
+reloading the library, at the cost of making the memory occupied by the
+library unavailable to other programs.  It is also slightly faster, because
+the library is loaded only once.
+
+When this option is not set, then it will be possible to flush ixemul.library
+when no programs use it (e.g., by typing "avail flush" at the CLI prompt or by
+selecting the Debug->flushlibs item from the workbench menu).
+@endnode
+@node showstack "Show stack usage"
+When this option is set, whenever a program exits, ixemul.library sends a
+message to the "ixstack port" port, reporting the stack usage of the program
+that just exited. When run with the -s option, the @{"ixstack" Link "GG:man/man1/ixstack.1/Main"} program will
+monitor these messages and print the stack usage and the total stack size of
+each program that exits.
+
+When this option is not set, no such messages are sent.
+
+You can use this option to estimate the stack requirements of a program, and
+then use @{"ixstack" Link "GG:man/man1/ixstack.1/Main"} to set the program's minimum stack size.
+@endnode
+@node ignoreenv "Ignore global environment"
+If this option is set, the getenv() function returns local environment
+variables, i.e., those created by the AmigaOS "set" command".  If this
+option is not set, the getenv() function returns global environment variables,
+i.e., those created by the AmigaOS "setenv" command", in addition to local
+ones.  Local environment variables have precedence over global ones.
+@endnode
+@node enforcer "Generate Enforcer hit when a trap occurs"
+If this option is set then, whenever a trap (division by zero, bus error,
+etc.) occurs, ixemul.library writes the error code to the address 0xdeaddead.
+Using the stack dump from Enforcer you can then try to find out where the
+problem occurred.  If this option is not set, no Enforcer hit is generated.
+
+Note: this option is only available on the ixprefs graphical interface if
+the @{"Enable advanced ixprefs options" link advanced} checkbox is checked.
+@endnode
+@node suppress "Suppress the `Insert volume in drive' requester"
+If this option is not set, whenever ixemul.library tries to access a
+non-existent volume, it will pop up a requester asking for the volume to be
+inserted.  If this option is set, ixemul.library will not pop up this
+requester.
+@endnode
+@node membuf "Membuf size - current restrictions"
+MEMBUF is the maximum file size eligible for ixemul's memory-backed
+read-only file path.  A value of zero disables that optimization.
+
+IMPORTANT FOR IXEMUL 80.3:
+Nonzero MEMBUF settings have caused problems, including configure
+failures, in tested 80.3 builds.  The currently recommended and
+reliably tested setting is 0.  Do not increase MEMBUF merely because
+more RAM is available; a positive value is not presently supported
+reliably in this project.
+
+ixprefs 80.3 still exposes the setting.  ix_set_settings() currently
+accepts nonnegative MEMBUF values; its I/O-buffer limit does NOT
+validate the safety of this separate feature.  A negative MEMBUF is
+ignored by the library rather than applied.
+
+@{"ixprefscheck" link check803} reports MEMBUF = 0 as recommended,
+warns for positive values, and rejects negative values.  Converting
+positive MEMBUF values requires --zero-membuf, which changes only the
+new output copy, not the input file or running library.
+@endnode
+@node networking "Networking support"
+This option allows the user to specify the kind of networking support they
+have:
+
+0. Auto detect (default): ixemul tries to figure out what networking support
+   the user has (none, AmiTCP, AS225).
+   
+1. No networking: all networking is turned off, regardless of whether the user
+   has AmiTCP or AS225 or not.
+
+2. AS225: set to AS225, if available.  Otherwise no network support.
+
+3. AmiTCP: set to AmiTCP, if available.  Otherwise no network support.
+
+Note that `Auto detect' will check for AmiTCP first, and AS225 second.  This
+is to circumvent problems when the socket.library emulation for AmiTCP is
+used.
+@endnode
+@node mufs "Enable MuFS support"
+If this option is set, then ixemul.library will enable special support for
+the Multiuser Filesystem (MuFS) if the multiuser.library is present. Not
+everybody wants this functionality, and since it turns out that the
+support is actually somewhat buggy, ixemul.library no longer supports
+MuFS by default, so you will have to turn this checkbox on if you want
+it. This checkbox is unique compared to the others, in that it won't be
+in effect until the ixemul.library has been flushed from memory.
+@endnode
+@node profiling "Profiling method"
+Gcc provides the -pg flag to enable code profiling.  When a program is
+compiled with -pg, a special function is called at the beginning of each
+function, which registers 1) how many times this function is called, 2)
+which functions called this function.
+
+In addition to this, a function in ixemul.library is called 50 times per
+second.  This function, among other things, increases timers and also,
+if the current program is compiled with -pg, samples the current program
+counter (PC) and registers this.
+
+When a program that is compiled with the -pg option has finished, a file
+called gmon.out is produced, containing the above two sets of statistics.
+Using the gprof program, you can read this file and determine which
+programs were called and how much time was spent in each function.
+The timing information is derived from the PC sampling.
+
+The problem with this scheme is that if the PC is outside the code in your
+program, nothing is registered.  Suppose a function calls a ROM function
+or some library function that takes 10 seconds to finish.  According to
+gprof, this function took 0 seconds, because the time spent elsewhere
+is not counted.  This may be what you want (no ``pollution'' from other
+sources), but there are cases where this is not what is needed.
+
+Thus, ixemul.library provides three methods of sampling the PC:
+1. Only in program (default): take samples only while your program is
+   running and the PC is within your program.
+2. Only in task: take samples while your program is running and if the PC is
+   outside your program code (e.g. in ixemul or in intuition.library), use
+   the last function your program entered before calling ixemul or whatever.
+3. Profile always: always take samples, even if other programs are running.
+   Again, the last recorded function gets the hit in those cases.
+
+The choice of option depends on what you are interested in profiling: the
+performance of just your own code (in UNIX terms, the ``user time''),
+the overall performance of your program (in UNIX terms, ``user'' plus
+``system'' time), or the performance of your program plus any external
+programs that your program invokes (e.g., using the system() function).
+@endnode
+@node blocks "Physical blocks per logical I/O block"
+This editable number is the count of physical blocks combined into
+one preferred logical I/O block.  It is separate from both the size
+of each block and the I/O multiplier.
+
+For example, 64 blocks of 512 bytes with a multiplier of 1x gives
+64 * 512 * 1 = 32768 bytes (32 KiB).  With 2x it gives 64 KiB.
+
+Valid physical-block counts are at least 1 and at most 65535, but
+the @{"512 KiB total I/O limit" link io_settings} normally imposes a
+smaller maximum for a particular block-size/multiplier combination.
+
+The CLI option is -b N or --fs-buf-factor N.  Despite its historical
+name, -b now sets the physical block count, not the complete encoded
+80.3 value.  Do NOT enter the tagged number 0x4D000040 in this field.
+@endnode
+@node advanced "Enable advanced ixprefs options"
+When this checkbox is selected, the @{"Translate /" link slash} and @{"Create Enforcer hit on trap" link enforcer}
+options become available on the ixprefs window.  This checkbox is unchecked
+by default.
+@endnode
+@node save "Save"
+Applies the selected configuration to the running ixemul.library,
+then writes ENV:ixemul.prefs and ENVARC:ixemul.prefs and exits on
+success.  The stored format is the 80.3 tagged 28-byte record.
+
+The new I/O controls are checked against the 512 KiB maximum before
+Save proceeds.  Save stops if Use fails to write ENV:.  A write error
+is reported rather than silently ignored.
+
+Note: The implementation applies the settings to the live library
+before it opens ENV:ixemul.prefs.  Thus, a write failure can leave
+live settings changed even though the file was not saved.  Back up
+existing preferences before experimenting with new settings.
+@endnode
+@node use "Use"
+Applies the configuration to the running ixemul.library, writes
+ENV:ixemul.prefs, and exits on success.  It does not intentionally
+write ENVARC:ixemul.prefs; changes may be lost at the next boot.
+
+The selected I/O settings must satisfy the 512 KiB maximum.
+If writing ENV: fails, a requester or CLI error is reported, but
+settings may already have been applied in memory.
+@endnode
+@node cancel "Cancel"
+Exits the program without making any changes to the configuration.
+@endnode
+@node menu "The ixprefs menu"
+ Project  Edit
+ @{"Save " link save}    @{"Reset to defaults" link defaults}
+ @{"Use  " link use}    @{"Last saved       " link last}
+ @{"About" link about}    @{"Restore          " link restore}
+ @{"Quit " link quit}
+@endnode
+@node CLI "CLI usage"
+Type "ixprefs" without any arguments, to get the @{"ixprefs window" link window}.
+
+Alternatively, you can control the program from the CLI.  You can use either
+short options, e.g., "-m 1024", or long options, e.g., "--membuf-limit 1024".
+If you use long options, you need only specify enough of the option name to
+disambiguate it from other option names, e.g., "--mem 1024".
+
+The following CLI options are available:
+
+-a 1, --allow-amiga-wildcard
+  @{"accept AmigaOS wildcard notation" link amigawildcard}
+-a 0, --no-allow-amiga-wildcard
+  @{"do not accept AmigaOS wildcard notation" link amigawildcard}
+-s 1, --unix-pattern-matching-case-sensitive
+  @{"use case sensitive UNIX pattern matching" link case}
+-s 0, --no-unix-pattern-matching-case-sensitive
+  do not @{"use case sensitive UNIX patter matching" link case}
+-/ 1, --translate-slash
+  @{"translate /foo -> foo: and a//b -> a/b" link slash}
+-/ 0, --no-translate-slash
+  do not @{"translate /foo -> foo: and a//b -> a/b" link slash}
+-m N, --membuf-limit N
+  @{"MEMBUF maximum in bytes; keep 0 in current 80.3 builds" link membuf}
+-b N, --fs-buf-factor N
+  @{"N physical blocks per logical I/O block" link blocks}
+-B N, --block-size N
+  @{"filesystem block size in bytes (default 512)" link blocksize}
+-X N, --io-multiplier N
+  @{"I/O buffer multiplier: N is 1 or 2" link iomultiplier}
+  The three values must total no more than 512 KiB.
+-i 1, --ignore-global-env
+  @{"ignore global environment" link ignoreenv} (ENV:)
+-i 0, --no-ignore-global-env
+  @{"do not ignore global environment" link ignoreenv} (ENV:)
+-e 1, --enforcer-hit
+  @{"generate Enforcer hit" link enforcer} when a trap occurs
+-e 0, --no-enforcer-hit
+  @{"do not generate Enforcer hit" link enforcer} when a trap occurs
+-v 0, --insert-disk-requester
+  @{"suppress the `Insert volume in drive' requester" link suppress}
+-v 1, --noinsert-disk-requester
+  @{"do not suppress the `Insert volume in drive' requester" link suppress}
+-u 0, --no-stack-usage
+  @{"do not show the stack usage" link showstack}
+-u 1, --stack-usage
+  @{"show the stack usage" link showstack}
+-f 0, --flush-library
+  @{"prevent ixemul.library from being flushed from memory" link noflush}
+-f 1, --no-flush-library
+  @{"do not prevent ixemul.library from being flushed from memory" link noflush}
+-n 0, --auto-detect
+  set @{"networking support" link networking} to auto detect
+-n 1, --no-networking
+  turn off @{"networking support" link networking}
+-n 2, --as225
+  use AS225 @{"networking support" link networking}
+-n 3, --amitcp
+  use AmiTCP @{"networking support" link networking}
+-p 0, --profile program
+  @{"profile" link profiling} the program only
+-p 1, --profile-task
+  @{"profile" link profiling} while the task is running
+-p 2, --profile-always
+  always @{"profile" link profiling} your program
+-d, --default
+  reset settings to defaults (other options are ignored)
+-L, --last-saved
+  reset settings from ENVARC:ixemul.prefs
+  (other options, including --default, are ignored)
+-M 1, --support-mufs
+  @{"enable MuFS support" link mufs}
+-M 0, --no-support-mufs
+  @{"do not enable MuFS support" link mufs}
+-S, --save
+  save new configuration
+-R, --report
+  display configuration; see the note below on side effects
+-V, --version
+  displays information about the @{"program" link distribution} and its @{"author" link author}
+  (other options, including --default and --last-saved are ignored)
+-h, --help
+  display the various ixprefs options
+80.3 examples:
+
+  ixprefs -b 64 -B 512 -X 1 -R
+  ixprefs -b 64 -B 512 -X 2 -S
+  ixprefs -b 64 -B 4096 -X 2 -S
+
+The first setting is 32768 bytes; the second is 65536 bytes;
+the third is the maximum allowed 524288 bytes.  For instance,
+-b 65 -B 4096 -X 2 exceeds the limit and is rejected.
+
+WARNING: The current ixprefs CLI executes Use() for ordinary calls
+without --save, even when --report (-R) is present.  Such a call
+may change live settings and write ENV:ixemul.prefs.  Use the
+read-only @{"ixprefscheck" link check803} to inspect an existing
+preferences file without changing anything.  --help and --version
+are special informational cases and do not call Use().
+@endnode
+@node about "About"
+Displays information about the @{"program" link distribution} and its @{"author" link author}.
+@endnode
+@node quit "Quit"
+Exits the program without making any changes to the configuration.
+@endnode
+@node defaults "Reset to defaults"
+Resets the various options to their default values.
+@endnode
+@node last "Last saved"
+Reads the configuration stored in ENVARC:ixemul.prefs.
+@endnode
+@node restore "Restore"
+Sets the various options to the values that are currently being used by
+ixemul.library.
+@endnode
+@node history "Program history"
+Version 1.0	June 23, 1995
+First public release.
+
+Version 1.1	June 26, 1995
+* Made the following enhancements, suggested by Kamil Iskra
+  (iskra@student.uci.agh.edu.pl):
+  + Ixprefs window is now font adaptive.
+  + Ixprefs window is now activated when opened.
+  + GZZ adjust flag in GadToolsBox turned off.
+  + CheckBox gadgets are now scalable under AmigaOS 3.x.
+  + NewLook menus under AmigaOS 3.x
+  + Use OpenFont() rather than DiskFont() to access system font, as this font
+    is always in memory.
+  + Slightly rearranged window layout to avoid problems with sizable gadgets.
+* Updated the documentation.
+
+Version 1.2	July 3, 1995
+* Added a UNIX-style CLI interface using getopt_long().
+* Modified showrequester() to print messages on stderr if the ixprefs window
+  is not open, so that no requesters pop up when the CLI interface is used.
+* Updated ixemul.library version check, so that the program now runs under
+  both version 41.0 and 41.1 without producing a warning.
+* Fixed the dates in this section.  Not that anyone cares, but the previous
+  versions of this program were written in June, not May!
+* Updated the documentation.
+
+Version 1.3	(not released)
+* Made a very minor modification in gadget placement (some gadgets were off
+  by one pixel).
+* Fixed a bug where if AmigaOS notation is turned off, it was impossible to
+  load or save the configuration file.  Remaining bug: if neither AmigaOS
+  notation nor / translation is allowed, there is no way to access S:ixprefs,
+  and loading/saving is impossible.  This could be fixed by temporarily
+  twiddling the flags.  However, as the "allow AmigaOS notation" flag has been
+  made obsolete in version 41.3, I don't plan to fix this.
+* Modified Makefile to remove ixprefs.c.orig.
+
+Version 2.0
+		beta 1, July 12, 1995
+* Made the following modifications in preparation for the integration of
+  ixprefs with the forthcoming cleaned-up version of ixemul.library:
+  + Dropped support for ix_unix_pattern_matching, ix_no_ces_then_open_console,
+    ix_ignore_global_env, ix_translate_dots, ix_force_translation, and
+    ix_translate_symlinks.  These settings will no longer be honored by
+    ixemul.library, as their values will be fixed.
+  + Added support for the new ix_allow_amiga_wildcard setting.
+  + Rearranged the GUI accordingly.
+  + Applied Kamil Iskra's modifications for AmigaOS 3.x to the resulting
+    ixprefs.c, and created a new ixprefs.c.diff.
+  + Changed the save format from human-readable to machine-readable (struct
+    settings).  I know many people will disagree with this decision, but it
+    was necessary for easier parsing of the configuration by ixemul.library.
+  + Added struct settings to ixemul.h.
+  + Modified the definition of the ixemul flags in ixemul.h from a bitfield to
+    a long word, with a set of #define's for the various flags.
+  + Changed the location of the save file from S:ixprefs to ENVARC:IXPREFS.
+    The "save" and "use" options also save the configuration in ENV:IXPREFS.
+* Modified main.c to call ixprefsrestore() to load the ixprefs settings from
+  ixemulbase instead of duplicating ixprefsrestore()'s code.
+* Updated the documentation.
+		beta 2, September 16, 1995
+* Saved configuration now includes values for obsolete flags, so that ixprefs
+  may work with earlier versions of ixemul.library.
+* Cleaned up the code by compiling with -Wall and eliminating the warnings.
+* Changed the name of the configuration file from IXPREFS to ixconfig.prefs,
+  to avoid a clash with the ixprefs executable in the unlikely case that
+  someone might have ENV: or ENVARC: in their path.
+* Fixed a typo ("upto" instead of "up to") in the text printed by the --help
+  option.
+* Added a version string to main.c.
+* Added support for the new ix_do_not_flush_library setting.
+* Applied Kamil Iskra's modifications for AmigaOS 3.x to the new version of
+  ixprefs.c, and created a new ixprefs.c.diff.
+* Updated the documentation.
+		beta 3, October 25, 1995
+* Corrected the punctuation of the configuration report in CLI mode.
+* Updated private copy of ixemul.h to reflect the changes in the official
+  version (41.4).
+* Added two paragraphs that were missing from the GPL notice in the source
+  files, Makefile, and documentation.
+* Changed the method of modifying ixprefs.c to add support for AmigaOS 3.x
+  features: instead of applying a diff file to ixprefs.c (clumsy, as the diff
+  file does not work if the GUI is changed) I now use a sed script that
+  modifies ixprefs.c on the fly (this should work even if the GUI changes, and
+  should work for other projects, too).  Kept a copy of ixprefs.c.diff around,
+  just in case...
+* Recompiled using -fbaserel.  The resulting executable is almost 2K smaller.
+* Added back support for ix_ignore_global_env.  Support for this option will
+  not be dropped from future versions of ixemul.library.
+* Made minor modifications in the help text in cli.c (s/don't/do not/).
+* Updated the documentation.
+		beta 4, October 25, 1995 (not distributed)
+* ix_do_not_flush_library and ix_ignore_global_env were not being restored
+  when doing a "last saved".
+
+Version 2.1	November 14, 1995
+Adapted for ixemul.library 42.0 by Hans Verkuil:
+* Independently applied a similar fix to that of version 2.0 beta 4.
+* Finished merging ixprefs into the main distribution.
+* Changed several things because all library base changes (such as the config
+  settings) now go through library calls.
+* Removed another setting (fibcache, was never used).
+* Added a new cycle gadget for future networking support.  The library accepts
+  it, but currently ignores it.
+* Rearranged the gadgets in the GUI, and changed the wording in the ixprefs
+  window and the output of the --report option, for a more aesthetically
+  pleasing appearance.
+* Updated the version check in main.c to check for version 42 of
+  ixemul.library, as ixprefs is now incompatible with version 41.0.
+* As ixprefs is now incompatible with versions prior to 42.0, ixprefs no
+  longer stores default values for obsolete flags.
+* Switched back to compiling without -fbaserel, as we had a manifestation of
+  the infamous "spilled register" problem.
+
+* Threw away ixprefs.c.diff, as the sed script proved capable of handling
+  the massive rearrangement of the GUI that occurred.
+* Removed the various tooltypes from ixprefs.info, which I had forgotten to
+  delete when copying the icon from sys:prefs.
+* Updated the documentation.
+
+Version 2.2	March 17, 1996
+* Adapted for ixemul.library 43.0 by Hans Verkuil (added support for
+  ix_create_enforcer_hit).
+* Minor cleanup (updated version to 2.2).
+* Updated the documentation.
+
+Version 2.3	August 6, 1996
+Adapted for ixemul.library 44.0 by Hans Verkuil:
+* Added support for ix_profile_method_mask.
+* Updated the version check in main.c to check for version 44 of
+  ixemul.library, as ixprefs is now incompatible with version 43.0.
+
+* Minor cleanup (updated version number, Copyright date, author's e-mail
+  address).
+* Updated the documentation.
+
+Version 2.4	September 23, 1996
+Adapted for ixemul.library 45.0 by Hans Verkuil:
+* Removed stack watcher and red zone.
+* Updated the documentation.
+
+Version 2.5	June 14, 1997
+Adapted for ixemul.library 47.0 by Hans Verkuil:
+* Added MuFS support checkbox.
+* Updated the documentation.
+
+Version 2.6	June 21, 1997
+* Massive code rearrangement to support more than one operating system.
+* Updated the documentation.
+
+Version 2.7	August 15, 1997
+* Added "Enable advanced ixprefs options" checkbox, to selectively
+  enable/disable some "dangerous" ixemul opytions from the GUI.
+
+Version 2.8	April 24, 2001
+* Changed the text of the "Check stack usage" button to
+  "Show stack usage", to agree with the command line version of the
+  option and the actual function of the option.
+* Added the desription of the "Show stack usage option" in the
+  documentation.
+
+ixemul 80.3 / ixprefs source update  November 14-16, 2026
+  ChatGPT modifications (JJ)
+* Extended the GUI and CLI with adjustable block size, physical block
+  count, and a 1x/2x I/O multiplier, subject to a 512 KiB total limit.
+* Kept the 28-byte settings structure but added tagged factor encoding.
+* Retained legacy factor decoding and documented downgrade hazards.
+* Added a reported-volume-block-size diagnostic button.
+* Documented the currently unreliable MEMBUF > 0 configuration.
+* Added ixprefscheck 1.0 for separate inspection and conversion.
+* Extended this guide while retaining the historical release history.
+* This is a source update for library 80.3; the application still
+  identifies itself as ixprefs v2.8.
+
+@endnode
+@node author "Author"
+Kriton Kyrimis
+
+e-mail: kyrimis@cti.gr
+-----
+"Officially, I am here quite unofficially!"
+-----
+@endnode
+@node distribution "Distribution"
+Ixprefs v.2.7--ixemul.library configuration program
+Copyright © 1995-1997 @{"Kriton Kyrimis" link author}
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+GUI designed using GadToolsBox 2.0c by Jan van den Baard
+@endnode
+@node requirements "Requirements"
+Historically ixprefs runs under AmigaOS 2.04 or later and p.OS;
+the GUI is provided for AmigaOS.  The original program needs at
+least ixemul.library v47.
+
+The new 80.3 I/O settings and tagged preferences require matching
+80.3-era library and ixprefs sources.  Do not use an 80.3 tagged
+preferences file with ixemul.library 80.2 or earlier.
+
+ixprefscheck 1.0 is a separate C89-compatible utility.  It operates
+on a named 28-byte preferences file and does not call ixemul's
+settings APIs.  A native GCC build may still link against ixemul
+as its normal C runtime, so it is not guaranteed to execute if the
+installed C runtime cannot initialize.
+
+For the updated native sources, use GeekGadgets GCC 2.95.3 or a
+compatible AmigaOS C environment.  Native compiler and runtime
+verification of the new tools remains the responsibility of the
+AmigaOS build/test environment.
+@endnode
+@node acknowledgments "Acknowledgments"
+Kamil Iskra (iskra@student.uci.agh.edu.pl) made several enhancement
+suggestions and contributed code for adapting ixprefs to AmigaOS 3.x
+(see program @{"history" link history}).
+
+Hans Verkuil (hans@wyst.hobby.nl) was kind enough to consider integrating
+ixprefs with ixemul.library, and to let me know in advance of the changes he
+planned to make to the library, so that I could adapt ixprefs on time.
+Hans also updated ixprefs from version 2.0 beta 4 to 2.1, and has also
+updated the program to versions 2.2, 2.3, 2.4 and 2.5.
+
+Thanks to Martin Blom (lcs@lysator.liu.se) for pointing out that I had to use
+EraseRect() to visually erase a gadget from a window.
+@endnode

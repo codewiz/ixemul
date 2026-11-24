@@ -1,0 +1,31 @@
+2026-09-14  Jörgen Johansson
+
+	* Updated for the current ixemul.library source tree.
+	* Removed completed, obsolete and currently excluded items.
+
+
+***	Modernize and reorganize the Makefile/build system.
+
+
+***	Add support for AF_UNIX/AF_LOCAL datagram sockets.
+
+
+***	Add connection timeout handling to AF_UNIX connect().
+
+
+***	Make AF_UNIX SO_RCVBUF, SO_SNDBUF, SO_RCVTIMEO and SO_SNDTIMEO
+	settings affect the actual stream buffering and waiting behaviour,
+	if this can be done without breaking existing semantics.
+
+
+***	Add proper locale support.
+
+***	Complete and restore manual-page documentation.
+	Many of the functions added after ixemul 48.2 do not yet have man
+	pages.  Add documentation for the new interfaces and keep existing
+	manual pages in sync with the current implementation.
+
+	Manual-page generation is currently disabled in the Makefile because
+	groff/nroff hangs during the build process.  Find a reliable way to
+	generate the documentation without blocking the ixemul build.
+
