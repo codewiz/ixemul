@@ -42,6 +42,10 @@
  */
 
 /*
+ * Revision 1.3  2026/11/25  ChatGPT modifications (JJ)
+ *  Do not predefine the GCC wchar_t typedef guard. Keep the historical
+ *  rune_t type independent of the compiler-defined wchar_t type.
+ *
  * Revision 1.2  2026/11/16  ChatGPT modifications (JJ)
  *  Leave ptrdiff_t to the compiler's <stddef.h>.  _BSD_PTRDIFF_T_
  *  is a typedef guard in GCC, so defining it here without defining
@@ -77,21 +81,10 @@
 #define _BSD_VA_LIST_ char *			/* va_list */
 #endif
 
-/*
- * Runes (wchar_t) is declared to be an ``int'' instead of the more natural
- * ``unsigned long'' or ``long''.  Two things are happening here.  It is not
- * unsigned so that EOF (-1) can be naturally assigned to it and used.  Also,
- * it looks like 10646 will be a 31 bit standard.  This means that if your
- * ints cannot hold 32 bits, you will be in trouble.  The reason an int was
- * chosen over a long is that the is*() and to*() routines take ints (says
- * ANSI C), but they use _RUNE_T_ instead of int.  By changing it here, you
- * lose a bit of ANSI conformance, but your programs will still work.
- *    
- * Note that _WCHAR_T_ and _RUNE_T_ must be of the same type.  When wchar_t
- * and rune_t are typedef'd, _WCHAR_T_ will be undef'd, but _RUNE_T remains
- * defined for ctype.h.
+/* wchar_t is defined by <stddef.h> or <stdlib.h>.  GCC uses
+ * _BSD_WCHAR_T_ as a typedef guard, not as a type macro.
+ * Preserve the historical rune_t type used by the ctype interface.
  */
-#define	_BSD_WCHAR_T_	int			/* wchar_t */
 #define	_BSD_RUNE_T_	int			/* rune_t */
 
 #endif	/* _ANSI_H_ */

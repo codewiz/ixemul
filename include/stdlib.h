@@ -38,6 +38,10 @@
 /*
  * stdlib.h,v
  *
+ * Revision 1.2  2026/11/25  ChatGPT modifications (JJ)
+ *  Use the compiler wchar_t type and honor the GCC typedef guard.
+ *  Do not typedef the built-in C++ wchar_t type.
+ *
  * Revision 1.1  2026/09/12  ChatGPT modifications (JJ)
  *
  *    Add mkdtemp() declaration for the public ixemul interface.
@@ -56,9 +60,16 @@ typedef	_BSD_SIZE_T_	size_t;
 #undef	_BSD_SIZE_T_
 #endif
 
-#ifdef	_BSD_WCHAR_T_
-typedef	_BSD_WCHAR_T_	wchar_t;
-#undef	_BSD_WCHAR_T_
+/* GCC uses _BSD_WCHAR_T_ as a guard for wchar_t. */
+#ifndef _BSD_WCHAR_T_
+#ifndef __cplusplus
+#ifdef __WCHAR_TYPE__
+typedef __WCHAR_TYPE__ wchar_t;
+#else
+typedef int wchar_t;
+#endif
+#endif /* !__cplusplus */
+#define _BSD_WCHAR_T_
 #endif
 
 typedef struct {
