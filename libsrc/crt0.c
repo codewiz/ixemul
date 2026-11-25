@@ -1,10 +1,15 @@
 /*
+ * Revision 1.3  2026/11/25  ChatGPT modifications (JJ)
+ *
+ *  Lower the constructor/destructor startup version guard to GCC 3.
+ *  Retain the original GCC 2.95.3 startup path. GCC 3-5 list format
+ *  compatibility remains to be verified.
+ *
  * Revision 1.2  2026/11/21  ChatGPT modifications (JJ)
  *
  *  Restrict the new constructor/destructor list sections and startup
  *  calls to GCC 6 and later. Preserve the original startup path for
  *  GeekGadgets GCC 2.95.3 and its older assembler.
- *
  *
  * Revision 1.1  2026/11/19  ChatGPT modifications (JJ)
  *
@@ -80,7 +85,7 @@ extern int main();
  * The lists are deliberately defined by crt0.o, not ixemul.library,
  * so relinking against this startup object enables the feature.
  */
-#if defined(__GNUC__) && __GNUC__ >= 6
+#if defined(__GNUC__) && __GNUC__ >= 3
 typedef void (*ix_ctor_func)(void);
 
 __attribute__((section(".list___CTOR_LIST__")))
@@ -117,7 +122,7 @@ ix_run_ctors(void)
   while (p > first)
     (*--p)();
 }
-#endif /* GCC 6 or later */
+#endif /* GCC 3 or later */
 
 /*
  * This is the first code executed.  Note that a_magic has to be at
@@ -465,7 +470,7 @@ start_stdio(int argc, char **argv, char **env)
       __progname = "";
   }
 
-#if defined(__GNUC__) && __GNUC__ >= 6
+#if defined(__GNUC__) && __GNUC__ >= 3
   /* Process and stdio setup must precede user constructors.  Register
    * destructor processing first so it remains behind atexit handlers
    * registered during construction (atexit uses LIFO order). */
@@ -473,7 +478,7 @@ start_stdio(int argc, char **argv, char **env)
     return 20;
 
   ix_run_ctors();
-#endif /* GCC 6 or later */
+#endif /* GCC 3 or later */
   return main(argc, argv, env);
 }
 
