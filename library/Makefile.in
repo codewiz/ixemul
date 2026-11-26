@@ -224,7 +224,7 @@ ii.o tz.o:		version.h
 # So force the defines of CPU and FPU via $DEF_CPU_FPU
 
 parse_version: $(true_srcdir)/parse_version.c
-				gcc $(CFLAGS) $(OTHER_CFLAGS) $(DEF_CPU_FPU) $(DEFS) $< -o $@
+				gcc $(CFLAGS) $(filter -D%,$(OTHER_CFLAGS)) $(DEF_CPU_FPU) $(DEFS) $< -o $@
 				chmod u+x $@
 
 # version.in is located in the same directory as parse_version,

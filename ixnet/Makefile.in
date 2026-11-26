@@ -116,7 +116,7 @@ create_header:	create_header.c $(srcdir)/../include/user.h ixnet.h
 		chmod u+x $@
 
 parse_version:	parse_version.c
-		gcc $(CFLAGS) $(OTHER_CFLAGS) -Dmc$(CPU) $(DEF_FPU) $(DEFS) $< -o $@
+		gcc $(CFLAGS) $(filter -D%,$(OTHER_CFLAGS)) -Dmc$(CPU) $(DEF_FPU) $(DEFS) $< -o $@
 		chmod u+x $@
 
 version.h:	parse_version $(srcdir)/../version.in
