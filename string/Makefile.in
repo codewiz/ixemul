@@ -39,7 +39,9 @@ endef
 
 FLAVOR_CFLAGS =	-m$(CPU) -m$(FPU)
 INCS =		-I$(srcdir) -I$(srcdir)/../library -I$(srcdir)/../include
-ALL_CFLAGS =	$(CFLAGS) $(FLAVOR_CFLAGS) $(INCS) $(OTHER_CFLAGS) -g
+# -fno-builtin: these are the string functions themselves, which GCC must
+# not turn into calls to each other (it makes memmove's bcopy() a memmove).
+ALL_CFLAGS =	$(CFLAGS) $(FLAVOR_CFLAGS) $(INCS) $(OTHER_CFLAGS) -fno-builtin -g
 
 LIB =		libstring.a
 
