@@ -4,6 +4,8 @@ AC_INIT(libsrc/crt0.c)
 AC_CANONICAL_SYSTEM
 
 AC_PROG_INSTALL
+dnl ixemul and the compiler probes of Autoconf 2.13 are GNU C89.
+CFLAGS="${CFLAGS--g -O2} -std=gnu89"
 AC_PROG_CC
 AC_PROG_AWK
 AC_CHECK_TOOL(RANLIB, ranlib, :)
